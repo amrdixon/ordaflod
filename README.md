@@ -1,0 +1,1 @@
+Orðaflóð is an AI-powered vocab study assistant intended for secondary students. It is a pupil-facing conversational agent whose primary function is to take a list of vocabulary words and quiz the pupil on their meaning. The study assistant is directed to explicitly use data from definitions obtained from Merriam-Webster to ensure a high-quality tool.
