@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice Agent</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 500px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    h1 {
+      margin-top: 0;
+      color: #333;
+    }
+    
+    #login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    
+    input {
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 16px;
+    }
+    
+    button {
+      padding: 12px;
+      background: #0070f3;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    
+    button:hover {
+      background: #0051cc;
+    }
+    
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    
+    #agent-interface {
+      display: none;
+    }
+    
+    .status {
+      padding: 15px;
+      border-radius: 5px;
+      margin-top: 20px;
+      text-align: center;
+    }
+    
+    .status.connecting {
+      background: #fff3cd;
+      color: #856404;
+    }
+    
+    .status.connected {
+      background: #d4edda;
+      color: #155724;
+    }
+    
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    
+    .error-message {
+      color: #d9534f;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Login Form -->
+    <div id="login-form">
+      <h1>🎤 Voice Agent</h1>
+      <p>Enter your access code to begin</p>
+      <input 
+        type="text" 
+        id="access-code-input" 
+        placeholder="Access code"
+        autocomplete="off"
+      />
+      <button id="connect-button">Connect</button>
+      <div id="error-message" class="error-message"></div>
+    </div>
+    
+    <!-- Agent Interface (shown after login) -->
+    <div id="agent-interface">
+      <h1>🎤 Voice Agent</h1>
+      <div id="status" class="status connecting">
+        Connecting...
+      </div>
+      <p style="color: #666; margin-top: 15px; font-size: 14px;">
+        💡 The agent is listening through your microphone. Just start speaking naturally!
+      </p>
+    </div>
+  </div>
+
+  <script>
+    console.log('=== INLINE TEST: HTML loaded ===');
+    window.addEventListener('DOMContentLoaded', () => {
+      console.log('=== INLINE TEST: DOM ready ===');
+      const btn = document.getElementById('connect-button');
+      console.log('=== INLINE TEST: Button is', btn);
+    });
+  </script>
+
+  
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
