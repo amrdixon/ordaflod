@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice Agent</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 500px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    h1 {
+      margin-top: 0;
+      color: #333;
+    }
+    
+    #login-form, #word-input-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    
+    #word-input-form {
+      display: none;
+    }
+    
+    input, textarea {
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 16px;
+    }
+    
+    textarea {
+      min-height: 120px;
+      font-family: inherit;
+      resize: vertical;
+    }
+    
+    button {
+      padding: 12px;
+      background: #0070f3;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    
+    button:hover {
+      background: #0051cc;
+    }
+    
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    
+    #agent-interface {
+      display: none;
+    }
+    
+    .status {
+      padding: 15px;
+      border-radius: 5px;
+      margin-top: 20px;
+      text-align: center;
+    }
+    
+    .status.connecting {
+      background: #fff3cd;
+      color: #856404;
+    }
+    
+    .status.connected {
+      background: #d4edda;
+      color: #155724;
+    }
+    
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    
+    .error-message {
+      color: #d9534f;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    
+    .info-text {
+      color: #666;
+      font-size: 14px;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Login Form -->
+    <div id="login-form">
+      <h1>🎤 Orðaflóð</h1>
+      <p>Enter your access code to begin</p>
+      <input 
+        type="text" 
+        id="access-code-input" 
+        placeholder="Access code"
+        autocomplete="off"
+      />
+      <button id="connect-button">Connect</button>
+      <div id="login-error" class="error-message"></div>
+    </div>
+    
+    <!-- Word Input Form -->
+    <div id="word-input-form">
+      <h1>📚 Vocabulary List</h1>
+      <p class="info-text">Enter the words you'd like to study, one per line:</p>
+      <textarea 
+        id="word-list-input" 
+        placeholder="ephemeral&#10;meticulous&#10;ambivalent"
+      ></textarea>
+      <button id="start-study-button">Start Studying</button>
+      <div id="word-error" class="error-message"></div>
+    </div>
+    
+    <!-- Agent Interface (shown after starting) -->
+    <div id="agent-interface">
+      <h1>🎤 Orðaflóð</h1>
+      <div id="status" class="status connecting">
+        Preparing your study session...
+      </div>
+      <p style="color: #666; margin-top: 15px; font-size: 14px;">
+        💡 The agent is listening through your microphone. Just start speaking naturally!
+      </p>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
