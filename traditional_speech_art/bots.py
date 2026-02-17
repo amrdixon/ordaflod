@@ -2,7 +2,6 @@ from litellm import completion
 from util import MeriamWebsterLookup, load_prompt
 import asyncio
 import whisper
-import pyttsx3
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
@@ -104,16 +103,11 @@ class SpeechVocabBot:
     def __init__(self, word_list: list[str]):
         self.bot = VocabStudyBot(word_list)
         
-        # Initialize TTS engine
-        self.tts_engine = pyttsx3.init()
-        self.tts_engine.setProperty('rate', 150)
-        self.tts_engine.setProperty('volume', 0.9)
-        
         # Initialize STT model (Whisper)
         print("Loading speech recognition model...")
         self.stt_model = whisper.load_model(WHISPER_MODEL_FP)
         
-        # Audio recording settings
+        # Audio recording settings        
         self.RATE = 16000
         self.CHANNELS = 1
         self.CHUNK_DURATION = 0.1  # 100ms chunks
@@ -236,7 +230,9 @@ class SpeechVocabBot:
         return result["text"]
     
     def speak(self, text: str):
-        """Convert text to speech with interruption support."""
+        """Convert text to speech using macOS native 'say' command."""
+        import subprocess
+        
         self.is_speaking = True
         self.interrupt_flag = False
         
@@ -247,13 +243,9 @@ class SpeechVocabBot:
         
         try:
             print(f"🔊 Speaking...")
-            self.tts_engine.say(text)
-            self.tts_engine.runAndWait()
-            
-            if self.interrupt_flag:
-                print("Speech interrupted by user")
-            else:
-                print("✓ Finished speaking")
+            # Use macOS native 'say' command)
+            subprocess.run(['say', text], check=True)
+            print("✓ Finished speaking")
                 
         except Exception as e:
             print(f"TTS Error: {e}")

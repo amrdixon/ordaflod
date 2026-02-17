@@ -1,0 +1,4 @@
+llm_model: "anthropic/claude-sonnet-4-5-20250929"
+prompt_fp: "prompt_llm_test.txt"
+vocab_list_fp: "data/vocab_words.json"
+vocab_list_key: "list1"

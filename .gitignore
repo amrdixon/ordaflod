@@ -1,1 +1,19 @@
-.env
+# Environment files
+*.env
+**/.env.local
+
+# Python
+**/__pycache__/
+**/venv/
+
+# Node.js
+**/node_modules/
+
+# macOS
+.DS_Store
+
+# Whisper model files (too large for git)
+traditional_speech_art/models/
+
+#Eval logs
+eval/logs/

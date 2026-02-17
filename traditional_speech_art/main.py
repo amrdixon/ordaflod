@@ -1,9 +1,14 @@
 from bots import SpeechVocabBot
 import sys
+import json
+import yaml
 
 def main():
     # Create bot with vocabulary list
-    vocab_list = ["ephemeral"]
+    with open('config.yml', 'r') as f:
+        config = yaml.load(f, Loader=yaml.SafeLoader)
+    with open(config['vocab_list_fp'], 'r') as f:
+        vocab_list = json.load(f)[config['vocab_list_key']]
     speech_bot = SpeechVocabBot(vocab_list)
 
     # Start the session
