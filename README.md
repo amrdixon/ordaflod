@@ -4,7 +4,7 @@ Orðaflóð is an AI-powered vocabulary study assistant intended for secondary s
 
 ## Projects
 
-This repository contains two different implementations of the Orðaflóð voice agent:
+This repository contains two different implementations of the Orðaflóð voice agent and an evaluation framework:
 
 ### [voice2voice_web/](voice2voice_web/)
 **Web-based Voice Agent**
@@ -35,6 +35,20 @@ A local Python application with full control over speech processing. Features in
 
 See [traditional_speech_art/README.md](traditional_speech_art/README.md) for setup instructions.
 
+### [eval/](eval/)
+**Evaluation Framework**
+
+A unified evaluation framework using Inspect AI to assess both bot architectures. Features include:
+- Abstracted bot interface for testing both implementations
+- Simulated user bot for automated testing
+- Configurable evaluation scenarios
+- Support for switching between traditional and realtime architectures
+- Automated conversation logging and scoring
+
+**Tech Stack**: Python, Inspect AI, LiteLLM, OpenAI SDK
+
+See [eval/README.md](eval/README.md) for setup and usage instructions.
+
 ## Configuration
 
 Both projects share API keys stored in a `.env` file at the root level.
@@ -58,6 +72,7 @@ Both projects share API keys stored in a `.env` file at the root level.
 
 - **voice2voice_web**: Requires `OPENAI_API_KEY`, `MW_API_KEY`, and `ACCESS_CODES`
 - **traditional_speech_art**: Requires `ANTHROPIC_API_KEY` and `MW_API_KEY`
+- **eval**: Requires keys for whichever architecture you're testing (see `eval_unified_config.yaml`)
 
 **Note**: `.env` files are gitignored and will never be committed to version control.
 
@@ -67,6 +82,7 @@ Each project is self-contained with its own dependencies and setup instructions:
 
 1. **For the web version**: Navigate to [voice2voice_web/](voice2voice_web/) and see the [README](voice2voice_web/README.md)
 2. **For the desktop version**: Navigate to [traditional_speech_art/](traditional_speech_art/) and see the [README](traditional_speech_art/README.md)
+3. **For evaluation**: Navigate to [eval/](eval/) and see the [README](eval/README.md)
 
 ## API Keys Required
 

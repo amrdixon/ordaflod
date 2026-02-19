@@ -1,7 +1,0 @@
-eval_llm_model: "anthropic/claude-sonnet-4-5-20250929"
-bot_dir: "../traditional_speech_art"
-bot_config_fp: "../traditional_speech_art/config.yaml"
-eval_datatset_fp: "../traditional_speech_art/data/vocab_eval_dataset.csv"
-user_bot_llm: "openai/gpt-4o"
-user_bot_prompt_fp: "simulated_user_prompt.txt"
-user_bot_percent_words_correct: 0.7

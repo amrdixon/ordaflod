@@ -69,8 +69,7 @@ vercel dev
 
 The app will be available at `http://localhost:3000`.
 
-**Whyvercel dev`** - Start local development server with API functions (recommended)
-- **`npm run dev`** - Start Vite dev server only (API endpoints won't work)dpoints are Vercel serverless functions that only work in the Vercel environment. Using `vercel dev` simulates this environment locally.
+**Why `vercel dev`?** The API endpoints are Vercel serverless functions that only work in the Vercel environment. Using `vercel dev` simulates this environment locally.
 
 ## Available Scripts
 
@@ -91,8 +90,7 @@ voice2voice_web/
 │   ├── token.js           # Vercel function: Generate OpenAI session tokens
 │   └── definitions.js     # Vercel function: Fetch word definitions
 ├── public/
-│   ├── prompt1.md         # System prompt for the voice agent
-│   └── prompt2.md         # Alternative system prompt
+│   └── prompt2.md         # System prompt for the voice agent (loaded by main.ts)
 ├── package.json           # Dependencies and scripts
 ├── tsconfig.json          # TypeScript configuration
 ├── vite.config.ts         # Vite configuration
@@ -155,7 +153,7 @@ To add or change access codes, update the `ACCESS_CODES` variable in your enviro
 
 ### Change System Prompt
 
-Edit `public/prompt1.md` or `public/prompt2.md` to customize how the voice agent behaves and responds to students.
+Edit `public/prompt2.md` to customize how the voice agent behaves and responds to students. This file is loaded by the application at runtime.
 
 ### Change Access Code
 

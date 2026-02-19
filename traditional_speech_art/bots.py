@@ -9,8 +9,11 @@ import os
 import threading
 import queue
 from dotenv import load_dotenv
+import yaml
 
-PROMPT_FP = "./prompt.md"
+# Load configuration
+with open('config.yaml', 'r') as f:
+    CONFIG = yaml.safe_load(f)
 
 ## set ENV variables
 os.environ["ANTHROPIC_API_KEY"] = os.getenv("ANTHROPIC_API_KEY")
@@ -48,7 +51,7 @@ class VocabStudyBot:
             self.conversation_history = []
 
             #Create studybot prompt
-            self.prompt = load_prompt(PROMPT_FP, self.vocab_dict)
+            self.prompt = load_prompt(CONFIG['prompt_fp'], self.vocab_dict)
 
             # Add system prompt to conversation history
             self.conversation_history.append({
@@ -65,9 +68,9 @@ class VocabStudyBot:
             self.last_response = initial_response
 
     def _get_model_response(self):
-         
+
         response = completion(
-              model="claude-sonnet-4-5-20250929",
+              model=CONFIG['llm_model'],
               messages=self.conversation_history
         )
         assistant_message = response['choices'][0]['message']['content']

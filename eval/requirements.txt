@@ -74,3 +74,8 @@ urllib3==2.6.3
 wrapt==1.17.3
 yarl==1.22.0
 zipp==3.23.0
+
+# Additional dependencies for unified evaluation framework
+litellm>=1.0.0
+openai>=1.30.0
+websockets>=12.0

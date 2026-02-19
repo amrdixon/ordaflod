@@ -53,11 +53,24 @@ ANTHROPIC_API_KEY=your_anthropic_key_here
 MW_API_KEY=your_merriam_webster_key_here
 ```
 
-### 4. Download Whisper model
+### 4. Configure application settings (optional)
+
+The `config.yaml` file contains application configuration:
+
+```yaml
+llm_model: "anthropic/claude-sonnet-4-5-20250929"
+prompt_fp: "prompt.md"
+vocab_list_fp: "data/vocab_words.json"
+vocab_list_key: "list1"
+```
+
+Adjust these settings to use different models, prompts, or vocabulary lists as needed.
+
+### 5. Download Whisper model
 
 Place the Whisper base model at: `models/whisper/base.pt`
 
-### 5. Run the application
+### 6. Run the application
 
 ```bash
 python main.py
@@ -68,7 +81,11 @@ python main.py
 - `main.py` - Entry point for the application
 - `bots.py` - VocabStudyBot and SpeechRecognitionBot classes
 - `util.py` - Utilities including Merriam-Webster lookup and prompt loading
-- `prompt.md` - System prompt template for the AI assistant
+- `config.yaml` - Configuration file (model, prompt path, vocab list settings)
+- `prompt.md` - System prompt template for the AI assistant (used by bots.py)
+- `data/` - Directory containing vocabulary word lists and evaluation datasets
+  - `vocab_words.json` - Vocabulary word lists with definitions
+  - `vocab_eval_dataset.csv` - Dataset for evaluation
 - `models/whisper/` - Directory for Whisper model (download separately)
 - `requirements.txt` - Python dependencies
 - `venv/` - Virtual environment (created during setup)

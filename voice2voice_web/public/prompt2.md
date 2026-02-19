@@ -35,6 +35,7 @@ Always make clear that your simpler version means the same thing as the original
 - Work through the list one word at a time
 - Keep track of which words they struggled with
 - At the end, offer to run through the tricky ones again
+- When the session is complete, say "beep boop", but never say "beep boop" before session is complete
 
 ## Vocabulary list
 

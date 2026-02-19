@@ -1,0 +1,32 @@
+# Unified Evaluation Configuration
+# Supports both traditional (Claude/LiteLLM) and realtime (OpenAI Realtime API) architectures
+
+# Select which architecture to test: "traditional" or "realtime"
+architecture: "realtime"
+
+# Traditional architecture configuration (Claude + LiteLLM)
+traditional:
+  model: "anthropic/claude-sonnet-4-5-20250929"
+  prompt_fp: "../traditional_speech_art/prompt.md"
+  vocab_list_fp: "../traditional_speech_art/data/vocab_words.json"
+  vocab_list_key: "list1"
+
+# Realtime architecture configuration (OpenAI Realtime API)
+realtime:
+  # API key loaded from environment variable
+  api_key_env: "OPENAI_API_KEY"
+  prompt_fp: "../voice2voice_web/public/prompt2.md"
+  vocab_list_fp: "../traditional_speech_art/data/vocab_words.json"
+  vocab_list_key: "list1"
+
+# Evaluation settings (shared across both architectures)
+eval_llm_model: "anthropic/claude-sonnet-4-5-20250929"
+eval_dataset_fp: "../traditional_speech_art/data/vocab_eval_dataset.csv"
+
+# Simulated user bot settings (shared)
+user_bot_llm: "openai/gpt-4o"
+user_bot_prompt_fp: "simulated_user_prompt.txt"
+user_bot_percent_words_correct: 0.7
+
+# Conversation settings
+max_turns: 30
