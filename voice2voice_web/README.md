@@ -46,6 +46,8 @@ npm install
 
 ### 2. Configure environment variables
 
+**For Local Development:**
+
 Create a `.env.local` file in this directory with:
 
 ```
@@ -54,10 +56,19 @@ MW_API_KEY=your_merriam_webster_key_here
 ACCESS_CODES=your-access-code-1,your-access-code-2,your-access-code-3
 ```
 
-**Note**: 
+**For Vercel Deployment:**
+
+Set environment variables in the Vercel Dashboard:
+1. Go to your project → Settings → Environment Variables
+2. Add: `OPENAI_API_KEY`, `MW_API_KEY`, and `ACCESS_CODES`
+3. Set scope to Production/Preview/Development as needed
+4. Redeploy after adding variables
+
+**Note**:
 - `ACCESS_CODES` should be a comma-separated list of valid access codes
 - The parent directory also has a `.env` file that you can use, or create a local `.env.local` for this project specifically
 - Never commit `.env` or `.env.local` files to version control
+- Local `.env.local` files are NOT deployed to Vercel - you must set variables in the dashboard
 
 ### 3. Run the development server
 
@@ -116,15 +127,18 @@ This project is configured for deployment on Vercel:
 npm install -g vercel
 ```
 
-2. Deploy to production:
+2. **IMPORTANT: Set environment variables FIRST** (before deploying)
+   - Go to Vercel Dashboard → Your Project → Settings → Environment Variables
+   - Add these variables:
+     - `OPENAI_API_KEY` - Your OpenAI API key
+     - `MW_API_KEY` - Your Merriam-Webster API key
+     - `ACCESS_CODES` - Comma-separated list (e.g., `code1,code2,code3`)
+   - Set scope to Production (and Preview/Development if needed)
+
+3. Deploy to production:
 ```bash
 vercel --prod
 ```
-
-3. Set environment variables in Vercel dashboard:
-   - `OPENAI_API_KEY`
-   - `MW_API_KEY`
-   - `ACCESS_CODES` (comma-separated list of valid access codes)
 
 ### Vercel Configuration
 
@@ -173,39 +187,12 @@ The UI is contained in `index.html` with inline styles. Edit the HTML structure 
    - Register at: https://dictionaryapi.com/
    - Free tier available
 
-## Troubleshooting
-
-**"Failed to fetch token" error**:
-- Check that `OPENAI_API_KEY` is set correctly in `.env.local`
-- Ensure you have API credits in your OpenAI account
-
-**"Definition not found" error**:
-- Check that `MW_API_KEY` is set correctly
-- Verify the word exists in Merriam-Webster's dictionary
-
-**Port already in use**:
-- Vite will automatically try the next available port
-- Or specify a port: `npm run dev -- --port 3000`
-
-**Build fails**:
-- Run `npm install` to ensure all dependencies are installed
-- Check for TypeScript errors: `npx tsc --noEmit`
-
 ## Development Notes
 
 - The app uses ES modules (`"type": "module"` in package.json)
 - TypeScript is compiled by Vite during build
 - API functions in `api/` are serverless functions for Vercel
 - Hot reload is enabled during development with `npm run dev`
-
-## Browser Support
-
-Works in modern browsers with:
-- WebRTC support
-- MediaRecorder API
-- ES6+ JavaScript support
-
-Tested on: Chrome, Safari, Firefox, Edge (latest versions)
 
 ## Related Projects
 

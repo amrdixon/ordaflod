@@ -50,7 +50,7 @@ Create a `.env` file in the project root (one level up) with:
 
 ```
 ANTHROPIC_API_KEY=your_anthropic_key_here
-MW_API_KEY=your_merriam_webster_key_here
+MERRIAM_WEBSTER_API_KEY=your_merriam_webster_key_here
 ```
 
 ### 4. Configure application settings (optional)

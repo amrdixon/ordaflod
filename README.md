@@ -65,12 +65,14 @@ Both projects share API keys stored in a `.env` file at the root level.
    OPENAI_API_KEY=your_openai_key_here
    ANTHROPIC_API_KEY=your_anthropic_key_here
    MW_API_KEY=your_merriam_webster_key_here
-   ACCESS_CODES=your-access-codes-comma-separated
+   ACCESS_CODES=your-access-codes-comma-separated  # Local dev only
    ```
 
 ### Required Keys by Project
 
-- **voice2voice_web**: Requires `OPENAI_API_KEY`, `MW_API_KEY`, and `ACCESS_CODES`
+- **voice2voice_web**: Requires `OPENAI_API_KEY` and `MW_API_KEY`
+  - For local dev: Also needs `ACCESS_CODES` in `.env`
+  - For Vercel deployment: Set `ACCESS_CODES` in Vercel Dashboard (Settings → Environment Variables)
 - **traditional_speech_art**: Requires `ANTHROPIC_API_KEY` and `MW_API_KEY`
 - **eval**: Requires keys for whichever architecture you're testing (see `eval_unified_config.yaml`)
 
