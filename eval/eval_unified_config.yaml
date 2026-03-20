@@ -14,7 +14,7 @@ vocab_key: "list3"
 # Traditional architecture configuration (Claude + LiteLLM)
 traditional:
   api_key_env: "OPENAI_API_KEY"
-  model: "openai/gpt-4o"
+  model: "anthropic/claude-sonnet-4-5"
   prompt_fp: "../traditional_speech_art/prompt.md"
 
 # Realtime architecture configuration (OpenAI Realtime API)

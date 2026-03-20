@@ -86,33 +86,35 @@ Edit [eval_unified_config.yaml](eval_unified_config.yaml) to customize your eval
 
 ```yaml
 # Choose which architecture to test
-architecture: "realtime"  # or "traditional"
+architecture: "traditional"  # or "realtime"
+
+# Vocabulary dataset
+vocab_fp: "../traditional_speech_art/data/vocab_words3.json"
+vocab_key: "list3"
 
 # Traditional architecture settings
 traditional:
-  model: "anthropic/claude-sonnet-4-5-20250929"
-  prompt_fp: "../traditional_speech_art/prompt_llm_test.txt"
-  vocab_list_fp: "../traditional_speech_art/data/vocab_words.json"
-  vocab_list_key: "list1"
+  api_key_env: "OPENAI_API_KEY"
+  model: "openai/gpt-4o"
+  prompt_fp: "../traditional_speech_art/prompt.md"
 
 # Realtime architecture settings
 realtime:
   api_key_env: "OPENAI_API_KEY"
   prompt_fp: "../voice2voice_web/public/prompt2.md"
-  vocab_list_fp: "../traditional_speech_art/data/vocab_words.json"
-  vocab_list_key: "list1"
 
-# Evaluation settings
-eval_llm_model: "anthropic/claude-sonnet-4-5-20250929"
-eval_dataset_fp: "../traditional_speech_art/data/vocab_eval_dataset.csv"
+# Evaluation LLM and judge
+eval_llm_model: "gemini/gemini-2.5-flash"
+judge_llm_model: "anthropic/claude-sonnet-4-6"
 
 # Simulated user bot settings
-user_bot_llm: "openai/gpt-4o"
+user_bot_llm: "gemini/gemini-2.5-flash"
 user_bot_prompt_fp: "simulated_user_prompt.txt"
 user_bot_percent_words_correct: 0.7  # 70% of words known, 30% unknown
 
 # Conversation settings
 max_turns: 40
+epochs: 10
 ```
 
 ## Running Evaluations
@@ -237,7 +239,7 @@ eval/
 
 ### Simulated User Bot
 
-The simulated user bot (GPT-4o) behaves like a real student:
+The simulated user bot (Gemini 2.5 Flash by default) behaves like a real student:
 - Gives short, natural answers (1-2 sentences)
 - Paraphrases definitions for known words (never dictionary-perfect)
 - Expresses genuine uncertainty for unknown words
@@ -250,21 +252,11 @@ Bots signal completion by saying "beep boop" (case-insensitive). The evaluation 
 
 ## Development Notes
 
-### Adding a New Bot Architecture
-
-To add a new bot architecture:
-
-1. Create a new adapter class implementing `VocabBotInterface`
-2. Add configuration section to `eval_unified_config.yaml`
-3. Update the factory function in `eval_unified.py` to handle the new architecture
-4. Test with a small evaluation run
-
 ### Customizing Evaluation Criteria
 
 The evaluation scoring is handled by Inspect AI's built-in scorers. To customize:
 - Modify the scorer configuration in `eval_unified.py`
 - Add custom scoring logic if needed
-- Update the evaluation dataset CSV with new criteria
 
 ## Related Projects
 
@@ -273,6 +265,7 @@ The evaluation scoring is handled by Inspect AI's built-in scorers. To customize
 
 ## Additional Resources
 
+- [The Demo Trap: Why I Spent More Time Evaluating My AI Than Building It](https://datafoss.ai/blog/demo-trap.html) — blog post on why this eval framework exists
 - [Inspect AI Documentation](https://inspect.ai-safety-institute.org.uk/)
 - [LiteLLM Documentation](https://docs.litellm.ai/)
 - [OpenAI Realtime API Documentation](https://platform.openai.com/docs/guides/realtime)

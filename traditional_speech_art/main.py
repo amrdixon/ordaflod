@@ -5,7 +5,7 @@ import yaml
 
 def main():
     # Create bot with vocabulary list
-    with open('config.yml', 'r') as f:
+    with open('config.yaml', 'r') as f:
         config = yaml.load(f, Loader=yaml.SafeLoader)
     with open(config['vocab_list_fp'], 'r') as f:
         vocab_list = json.load(f)[config['vocab_list_key']]

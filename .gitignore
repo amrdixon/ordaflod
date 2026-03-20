@@ -15,5 +15,17 @@
 # Whisper model files (too large for git)
 traditional_speech_art/models/
 
-#Eval logs
+#Eval logs and output
 eval/logs/
+eval/data/
+
+#Claude settings
+*.claude
+
+.vscode/
+
+#Analysis scripts
+eval/analysis/
+
+# Legacy local dev server (replaced by Vercel serverless functions)
+voice2voice_web/server.js

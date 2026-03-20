@@ -20,14 +20,6 @@ This is a TypeScript/Vite web application that runs in the browser and connects 
 - **Access Control**: Configurable access code for student authentication
 - **Production Ready**: Configured for deployment on Vercel
 
-## Tech Stack
-
-- **TypeScript** - Type-safe JavaScript
-- **Vite** - Fast build tool and dev server
-- **OpenAI Realtime API** - Voice-to-voice conversation
-- **Vercel** - Serverless deployment platform
-- **Zod** - Runtime validation
-
 ## Prerequisites
 
 - Node.js (v16 or higher)
@@ -169,9 +161,9 @@ To add or change access codes, update the `ACCESS_CODES` variable in your enviro
 
 Edit `public/prompt2.md` to customize how the voice agent behaves and responds to students. This file is loaded by the application at runtime.
 
-### Change Access Code
+### Change Access Codes
 
-In `index.html`, find the login form handler and update the hardcoded access code check.
+Update the `ACCESS_CODES` variable in your `.env.local` file (or Vercel environment variables for production). See the [Access Codes](#access-codes) section above.
 
 ### Modify UI
 
@@ -186,13 +178,6 @@ The UI is contained in `index.html` with inline styles. Edit the HTML structure 
 2. **Merriam-Webster Dictionary API Key** - For word definitions
    - Register at: https://dictionaryapi.com/
    - Free tier available
-
-## Development Notes
-
-- The app uses ES modules (`"type": "module"` in package.json)
-- TypeScript is compiled by Vite during build
-- API functions in `api/` are serverless functions for Vercel
-- Hot reload is enabled during development with `npm run dev`
 
 ## Related Projects
 

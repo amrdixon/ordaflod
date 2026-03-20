@@ -4,18 +4,23 @@ from typing import List, Dict
 import json
 
 class TraditionalBot(VocabBotInterface):
-    """Adapter for traditional Claude-based bot using LiteLLM.
+    """Adapter for LLM-based bot using LiteLLM.
 
     This adapter wraps the LiteLLM completion API to match the VocabBotInterface,
-    allowing the traditional architecture (Claude Sonnet via LiteLLM) to be used
-    in the unified evaluation framework.
+    allowing the traditional (non-realtime) architecture to be used in the unified
+    evaluation framework. The model is configured via eval_unified_config.yaml.
+
+    API keys for the chosen provider (OpenAI, Anthropic, Gemini, etc.) must be set
+    in the .env file. Other providers supported by LiteLLM should work but may
+    require additional setup.
     """
 
     def __init__(self, model: str = "anthropic/claude-sonnet-4-5-20250929"):
         """Initialize the traditional bot adapter.
 
         Args:
-            model: LiteLLM model identifier (default: Claude Sonnet 4.5)
+            model: LiteLLM model identifier (default: Claude Sonnet 4.5).
+                   Override via eval_unified_config.yaml.
         """
         self.model = model
         self.conversation_history = []

@@ -50,7 +50,7 @@ Create a `.env` file in the project root (one level up) with:
 
 ```
 ANTHROPIC_API_KEY=your_anthropic_key_here
-MERRIAM_WEBSTER_API_KEY=your_merriam_webster_key_here
+MW_API_KEY=your_merriam_webster_key_here
 ```
 
 ### 4. Configure application settings (optional)
@@ -79,13 +79,11 @@ python main.py
 ## Project Structure
 
 - `main.py` - Entry point for the application
-- `bots.py` - VocabStudyBot and SpeechRecognitionBot classes
+- `bots.py` - VocabStudyBot and SpeechVocabBot classes
 - `util.py` - Utilities including Merriam-Webster lookup and prompt loading
 - `config.yaml` - Configuration file (model, prompt path, vocab list settings)
 - `prompt.md` - System prompt template for the AI assistant (used by bots.py)
-- `data/` - Directory containing vocabulary word lists and evaluation datasets
-  - `vocab_words.json` - Vocabulary word lists with definitions
-  - `vocab_eval_dataset.csv` - Dataset for evaluation
+- `data/` - Directory containing vocabulary word lists with definitions
 - `models/whisper/` - Directory for Whisper model (download separately)
 - `requirements.txt` - Python dependencies
 - `venv/` - Virtual environment (created during setup)
