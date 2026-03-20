@@ -2,13 +2,7 @@
 
 Orðaflóð is an AI-powered vocabulary study assistant intended for secondary students. It is a pupil-facing conversational agent whose primary function is to take a list of vocabulary words and quiz the pupil on their meaning through natural voice interaction. The study assistant uses definitions from Merriam-Webster to ensure high-quality, authoritative information.
 
-> **Blog post:** [The Demo Trap: Why I Spent More Time Evaluating My AI Than Building It](https://datafoss.ai/blog/demo-trap.html) — the story behind this project, including how formal evaluation revealed that the bot was silently skipping required review steps and worked correctly only ~72–77% of the time despite looking great in demos. It also uncovers how rigorous evaluation transformed my coding agent into a research collaborator by giving it something to reason about.
-
-## Why Evaluation Matters Here
-
-Demos are deceptive. When building Orðaflóð, informal testing looked promising — but structured evaluation told a different story. The bot would silently skip protocol steps with no error, no warning, just a plausible-sounding response that was functionally wrong.
-
-As AI shifts from assisting humans to driving them, the failure mode that matters most is the one that's invisible. The asymmetry between appearance in a demo and actual performance is a central challenge of deploying AI in high-stakes domains. The `eval/` framework in this repo addresses this.
+> **Blog post:** [The Demo Trap: Why I Spent More Time Evaluating My AI Than Building It](https://datafoss.ai/blog/demo-trap.html) — the story behind this project, including how formal evaluation revealed that the bot was silently skipping required review steps and worked correctly only ~72–77% of the time despite looking great in demos. It also uncovers how rigorous evaluation transformed my coding agent into a research collaborator by giving it something to reason about. See the `eval/` framework in this repo.
 
 ## Projects
 
