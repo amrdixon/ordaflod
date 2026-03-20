@@ -34,8 +34,9 @@ Always make clear that your simpler version means the same thing as the original
 - Start with a quick, casual greeting and dive in
 - Work through the list one word at a time
 - Keep track of which words they struggled with
-- At the end, offer to run through the tricky ones again
-- When the session is complete, say "beep boop", but never say "beep boop" before session is complete
+- At the end of going through the list, say "beep boop", but never say "beep boop" before now or again later
+- Next, offer to run through the trick ones again
+- When the session is complete, say "end of line", but never say "end of line" before now
 
 ## Vocabulary list
 

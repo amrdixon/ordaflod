@@ -1,15 +1,19 @@
 from inspect_ai import Task, task, eval
 from inspect_ai.solver import solver, Generate, TaskState
 from inspect_ai.scorer import scorer, Score, mean, stderr
-from inspect_ai.dataset import csv_dataset
+from inspect_ai.dataset import Sample
 from inspect_ai.model import ChatMessageUser
 from typing import Any, Dict, Tuple
 import json
+import uuid
 import yaml
 import random
-from litellm import completion
+from litellm import acompletion
 from dotenv import load_dotenv
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import bot interfaces and adapters
 from bot_interface import VocabBotInterface
@@ -20,8 +24,17 @@ from realtime_bot import RealtimeBot
 with open("eval_unified_config.yaml") as f:
     CONFIG = yaml.safe_load(f)
 
-# Load API keys from .env file
-load_dotenv('../.env')
+# Load API keys from .env file specified in config
+load_dotenv(CONFIG['env_file'])
+
+
+def format_conversation(conversation: list) -> str:
+    """Format a conversation list as a readable transcript string."""
+    lines = []
+    for msg in conversation:
+        role = "User" if msg['role'] == 'user' else "Bot"
+        lines.append(f"{role}: {msg['content']}")
+    return "\n".join(lines)
 
 
 def create_vocab_bot() -> VocabBotInterface:
@@ -65,56 +78,65 @@ def load_bot_config() -> Tuple[str, Dict[str, str]]:
         prompt = f.read()
 
     # Load vocabulary list
-    vocab_list_fp = bot_config['vocab_list_fp']
-    vocab_list_key = bot_config['vocab_list_key']
-
-    with open(vocab_list_fp, 'r') as f:
+    with open(CONFIG['vocab_fp'], 'r') as f:
         vocab_data = json.load(f)
-        vocab_dict = vocab_data[vocab_list_key]
+        vocab_dict = vocab_data[CONFIG['vocab_key']]
+
+    # Prepend a unique session ID to bust prompt caching
+    prompt = f"<!-- session-id: {uuid.uuid4()} -->\n\n" + prompt
 
     return prompt, vocab_dict
 
 
-def setup_user_bot() -> Tuple[str, str, list, list]:
-    """Setup simulated user bot with known/unknown words.
+def setup_user_bot() -> Tuple[str, str, Dict[str, str]]:
+    """Load user bot resources (model, prompt template, vocab).
 
     Returns:
-        Tuple of (user_model, user_prompt, known_words, unknown_words)
+        Tuple of (user_model, prompt_template, vocab_words)
+
+    Note: The prompt template still contains {{KNOWN_WORDS}} and {{UNKNOWN_WORDS}}
+    placeholders. Call _build_user_prompt() inside each solver to get a fresh
+    random known/unknown split per epoch.
     """
-    # Load user bot prompt template
-    user_prompt = open(CONFIG['user_bot_prompt_fp'], 'r').read()
+    template = open(CONFIG['user_bot_prompt_fp'], 'r').read()
 
-    # Load vocabulary to split into known/unknown
-    architecture = CONFIG['architecture']
-    bot_config = CONFIG[architecture]
-
-    vocab_list_fp = bot_config['vocab_list_fp']
-    vocab_list_key = bot_config['vocab_list_key']
-
-    with open(vocab_list_fp, 'r') as f:
+    with open(CONFIG['vocab_fp'], 'r') as f:
         vocab_data = json.load(f)
-        vocab_words = vocab_data[vocab_list_key]
-
-    # Shuffle and split words
-    vocab_words_keys = list(vocab_words.keys())
-    random.shuffle(vocab_words_keys)
-
-    split_point = int(len(vocab_words) * CONFIG['user_bot_percent_words_correct'])
-    known_words = vocab_words_keys[:split_point]
-    unknown_words = vocab_words_keys[split_point:]
-
-    # Replace template variables
-    user_prompt = user_prompt.replace(
-        '{{KNOWN_WORDS}}',
-        json.dumps(known_words, indent=2)
-    )
-    user_prompt = user_prompt.replace(
-        '{{UNKNOWN_WORDS}}',
-        json.dumps(unknown_words, indent=2)
-    )
+        vocab_words = vocab_data[CONFIG['vocab_key']]
 
     user_model = CONFIG['user_bot_llm']
-    return user_model, user_prompt, known_words, unknown_words
+    return user_model, template, vocab_words
+
+
+def _build_user_prompt(template: str, vocab_words: Dict[str, str]) -> Tuple[str, list, list]:
+    """Build a filled user bot prompt with a fresh random known/unknown split.
+
+    Called once per epoch inside each solver so that every conversation
+    uses a different split of known vs unknown words.
+
+    Args:
+        template: Raw prompt template containing {{KNOWN_WORDS}} and
+                  {{UNKNOWN_WORDS}} placeholders (and optionally extra
+                  suffixes like the review instruction).
+        vocab_words: Full vocabulary dict {word: definition}.
+
+    Returns:
+        Tuple of (filled_prompt, known_words, unknown_words)
+    """
+    vocab_keys = list(vocab_words.keys())
+    random.shuffle(vocab_keys)
+
+    split_point = int(len(vocab_keys) * CONFIG['user_bot_percent_words_correct'])
+    known_words = vocab_keys[:split_point]
+    unknown_words = vocab_keys[split_point:]
+
+    prompt = template.replace('{{KNOWN_WORDS}}', json.dumps(known_words, indent=2))
+    prompt = prompt.replace('{{UNKNOWN_WORDS}}', json.dumps(unknown_words, indent=2))
+
+    # Prepend a unique session ID to bust prompt caching
+    prompt = f"<!-- session-id: {uuid.uuid4()} -->\n\n" + prompt
+
+    return prompt, known_words, unknown_words
 
 
 @task
@@ -123,68 +145,111 @@ def unified_completion_rate() -> Task:
 
     Tests vocabulary bot completion rate using simulated conversations.
     """
-    user_model, user_prompt, known_words, unknown_words = setup_user_bot()
+    user_model, user_prompt_template, vocab_words = setup_user_bot()
 
     return Task(
         name=f"Unified Completion Rate Evaluation ({CONFIG['architecture']})",
-        dataset=csv_dataset(CONFIG['eval_dataset_fp']),
-        epochs=1,
+        dataset=[Sample(input=json.dumps(vocab_words))],
+        epochs=CONFIG['epochs'],
         solver=[
-            unified_simulated_conversation(user_prompt, user_model, known_words, unknown_words),
+            unified_simulated_conversation(user_prompt_template, vocab_words, user_model),
             unified_final_word_list_request(),
             cleanup_bot()  # Clean up bot resources at the end
         ],
         scorer=[
             words_covered_rate_bot_perception(),
-            words_covered_rate_ground_truth()
+            words_covered_rate_ground_truth(),
+            hint_quality_scorer()
         ]
     )
 
 
 @task
-def unified_recall_accuracy() -> Task:
-    """Unified evaluation task testing bot's ability to recall missed words.
+def unified_review_accuracy() -> Task:
+    """Evaluation task testing which missed words are reviewed after the quiz.
 
-    Tests whether the bot can accurately remember which words the student
-    struggled with during the conversation.
+    The simulated user is configured to accept the bot's offer to review
+    missed/tricky words. The conversation runs past 'beep boop' (end of quiz)
+    and ends when 'end of line' is detected (end of review phase).
+
+    The scorer measures how well the bot covered the student's actual unknown
+    words during the review segment (between 'beep boop' and 'end of line').
     """
-    user_model, user_prompt, known_words, unknown_words = setup_user_bot()
+    user_model, user_prompt_template, vocab_words = setup_user_bot()
+
+    # Append review instruction to template before passing to solver.
+    # The {{KNOWN_WORDS}}/{{UNKNOWN_WORDS}} placeholders are still present
+    # and will be filled per-epoch inside the solver.
+    review_template = (
+        user_prompt_template
+        + "\n\nIMPORTANT: If the bot asks whether you would like to review "
+        "missed or tricky words, always reply with a simple yes."
+    )
 
     return Task(
-        name=f"Unified Recall Accuracy Evaluation ({CONFIG['architecture']})",
-        dataset=csv_dataset(CONFIG['eval_dataset_fp']),
-        epochs=1,
+        name=f"Unified Review Accuracy Evaluation ({CONFIG['architecture']})",
+        dataset=[Sample(input=json.dumps(vocab_words))],
+        epochs=CONFIG['epochs'],
         solver=[
-            unified_simulated_conversation(user_prompt, user_model, known_words, unknown_words),
-            recall_missed_words_request(),
-            cleanup_bot()  # Clean up bot resources at the end
+            review_simulated_conversation(review_template, vocab_words, user_model),
+            cleanup_bot()
         ],
         scorer=[
-            missed_words_recall_accuracy()
+            reviewed_words_accuracy(),
+            bot_perceived_review_accuracy()
         ]
     )
 
 
+# @task
+# def unified_recall_accuracy() -> Task:
+#     """Unified evaluation task testing bot's ability to recall missed words.
+
+#     Tests whether the bot can accurately remember which words the student
+#     struggled with during the conversation.
+#     """
+#     user_model, user_prompt, known_words, unknown_words = setup_user_bot()
+
+#     return Task(
+#         name=f"Unified Recall Accuracy Evaluation ({CONFIG['architecture']})",
+#         dataset=[Sample(input=json.dumps(vocab_words))],
+#         epochs=CONFIG['epochs'],
+#         solver=[
+#             unified_simulated_conversation(user_prompt, user_model, known_words, unknown_words),
+#             recall_missed_words_request(),
+#             cleanup_bot()  # Clean up bot resources at the end
+#         ],
+#         scorer=[
+#             missed_words_recall_accuracy()
+#         ]
+#     )
+
+
 @solver
 def unified_simulated_conversation(
-    user_prompt: str,
+    user_prompt_template: str,
+    vocab_words: Dict[str, str],
     user_model: str = "openai/gpt-4o",
-    known_words: list = None,
-    unknown_words: list = None
 ):
     """Unified solver that simulates conversation with both bot architectures.
 
     Args:
-        user_prompt: System prompt for simulated user bot
-        user_model: LLM model to use for user simulation
-        known_words: Words the simulated user knows
-        unknown_words: Words the simulated user doesn't know
+        user_prompt_template: Raw system prompt template for the simulated user
+                              bot (still contains {{KNOWN_WORDS}} and
+                              {{UNKNOWN_WORDS}} placeholders).
+        vocab_words: Full vocabulary dict {word: definition}.
+        user_model: LLM model to use for user simulation.
 
     Returns:
         Solver function for Inspect AI
     """
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
+        # Build a fresh known/unknown split for this epoch
+        user_prompt, known_words, unknown_words = _build_user_prompt(
+            user_prompt_template, vocab_words
+        )
+
         # Create bot instance via factory
         bot = create_vocab_bot()
 
@@ -198,8 +263,8 @@ def unified_simulated_conversation(
         state.metadata['bot_instance'] = bot
 
         # Store ground truth known/unknown words for scorers
-        state.metadata['known_words'] = [w.lower() for w in (known_words or [])]
-        state.metadata['unknown_words'] = [w.lower() for w in (unknown_words or [])]
+        state.metadata['known_words'] = [w.lower() for w in known_words]
+        state.metadata['unknown_words'] = [w.lower() for w in unknown_words]
 
         # Initialize conversation tracking
         turn = 0
@@ -233,11 +298,17 @@ def unified_simulated_conversation(
             print(f"Turn {turn}:")
             print(f"  User: {user_message}")
             print(f"  Bot: {bot_response[:100]}...")
+            if not bot_response:
+                raise RuntimeError(
+                    f"Bot returned empty response on turn {turn}. "
+                    f"Last user message: {user_message!r}"
+                )
 
             # Check if session is complete
             session_complete = bot.is_session_complete()
 
             if session_complete:
+                state.metadata['token_usage_initial_pass'] = bot.get_token_usage()
                 print("  [Session complete - 'beep boop' detected]")
                 break
 
@@ -255,17 +326,26 @@ def unified_simulated_conversation(
                 for msg in conversation_history
             ])
 
-            # Get user response from LiteLLM
-            user_response = completion(
+            # Get user response from LiteLLM (async to avoid blocking the event loop)
+            user_response = await acompletion(
                 model=user_model,
-                messages=user_messages
+                messages=user_messages,
+                num_retries=5,
             )
             user_message = user_response['choices'][0]['message']['content']
+            if user_message is None:
+                raise RuntimeError(
+                    f"Simulated user LLM returned null content on turn {turn}. "
+                    f"Full response: {user_response['choices'][0]['message']}"
+                )
 
         # Store final state information
         state.metadata['bot_history'] = bot.get_history()
         state.metadata['session_complete'] = session_complete
         state.metadata['turns'] = turn
+        state.metadata['conversation_transcript'] = format_conversation(
+            state.metadata['conversation']
+        )
 
         print(f"\nConversation ended after {turn} turns")
         print(f"Session complete: {session_complete}\n")
@@ -307,7 +387,8 @@ def unified_final_word_list_request():
         final_response = await bot.send_message(final_request)
         print(f"Bot's word list response: {final_response}\n")
 
-        # Store final response in metadata
+        # Store final request and response in metadata
+        state.metadata['final_word_list_request'] = final_request
         state.metadata['final_word_list'] = final_response
 
         return state
@@ -344,7 +425,8 @@ def recall_missed_words_request():
         recall_response = await bot.send_message(recall_request)
         print(f"Bot's missed words response: {recall_response}\n")
 
-        # Store recall response in metadata
+        # Store recall request and response in metadata
+        state.metadata['missed_words_recall_request'] = recall_request
         state.metadata['missed_words_recall'] = recall_response
 
         return state
@@ -375,6 +457,408 @@ def cleanup_bot():
     return solve
 
 
+@solver
+def review_simulated_conversation(
+    user_prompt_template: str,
+    vocab_words: Dict[str, str],
+    user_model: str = "openai/gpt-4o",
+):
+    """Solver that runs a conversation through the review phase.
+
+    Like unified_simulated_conversation but:
+    - Does NOT stop at 'beep boop'; instead records its position in metadata
+    - Stops when 'end of line' is detected (end of review phase)
+
+    Args:
+        user_prompt_template: Raw system prompt template for the simulated user
+                              bot (still contains {{KNOWN_WORDS}} and
+                              {{UNKNOWN_WORDS}} placeholders). Should already
+                              include the review-acceptance instruction suffix.
+        vocab_words: Full vocabulary dict {word: definition}.
+        user_model: LLM model to use for user simulation.
+
+    Returns:
+        Solver function for Inspect AI
+    """
+
+    async def solve(state: TaskState, generate: Generate) -> TaskState:
+        # Build a fresh known/unknown split for this epoch
+        user_prompt, known_words, unknown_words = _build_user_prompt(
+            user_prompt_template, vocab_words
+        )
+
+        bot = create_vocab_bot()
+        prompt, vocab_dict = load_bot_config()
+        await bot.initialize(prompt, vocab_dict)
+
+        state.metadata['bot_instance'] = bot
+        state.metadata['known_words'] = [w.lower() for w in known_words]
+        state.metadata['unknown_words'] = [w.lower() for w in unknown_words]
+
+        turn = 0
+        max_turns = CONFIG['max_turns']
+        session_complete = False
+        beep_boop_index = None  # conversation list index of the 'beep boop' message
+
+        state.metadata['conversation'] = []
+
+        user_message = "Hi!"
+
+        print(f"\n=== Starting review conversation with {CONFIG['architecture']} bot ===")
+
+        while not session_complete and turn < max_turns:
+            turn += 1
+
+            bot_response = await bot.send_message(user_message)
+
+            state.metadata['conversation'].append({'role': 'user', 'content': user_message})
+            state.metadata['conversation'].append({'role': 'assistant', 'content': bot_response})
+
+            print(f"Turn {turn}:")
+            print(f"  User: {user_message}")
+            print(f"  Bot: {bot_response[:100]}...")
+            if not bot_response:
+                raise RuntimeError(
+                    f"Bot returned empty response on turn {turn}. "
+                    f"Last user message: {user_message!r}"
+                )
+
+            # Record the first 'beep boop' occurrence (start of review phase)
+            if beep_boop_index is None and 'beep boop' in bot_response.lower():
+                beep_boop_index = len(state.metadata['conversation']) - 1
+                state.metadata['token_usage_initial_pass'] = bot.get_token_usage()
+                print("  [Beep boop detected - review phase begins]")
+
+            # Session ends on 'end of line'
+            if 'end of line' in bot_response.lower():
+                state.metadata['token_usage_full_session'] = bot.get_token_usage()
+                print("  [End of line detected - session complete]")
+                session_complete = True
+                break
+
+            # Generate next user response using simulated user bot
+            conversation_history = bot.get_history()
+            flipped_roles = {'assistant': 'user', 'user': 'assistant'}
+            user_messages = [{'role': 'system', 'content': user_prompt}]
+            user_messages.extend([
+                {'role': flipped_roles[msg['role']], 'content': msg['content']}
+                for msg in conversation_history
+            ])
+
+            logger.debug(
+                f"Turn {turn} — simulated user messages payload:\n"
+                + json.dumps(user_messages, indent=2, ensure_ascii=False)
+            )
+
+            null_content_attempts = 0
+            user_message = None
+            while user_message is None:
+                user_response = await acompletion(model=user_model, messages=user_messages, num_retries=5)
+                user_message = user_response['choices'][0]['message']['content']
+                if user_message is None:
+                    null_content_attempts += 1
+                    logger.warning(
+                        f"Simulated user LLM returned null content on turn {turn}, "
+                        f"attempt {null_content_attempts}. "
+                        f"Full response: {user_response['choices'][0]['message']}"
+                    )
+                    if null_content_attempts >= 3:
+                        raise RuntimeError(
+                            f"Simulated user LLM returned null content on turn {turn} "
+                            f"after {null_content_attempts} attempts. "
+                            f"Full response: {user_response['choices'][0]['message']}"
+                        )
+
+        state.metadata['bot_history'] = bot.get_history()
+        state.metadata['session_complete'] = session_complete
+        state.metadata['turns'] = turn
+        state.metadata['beep_boop_index'] = beep_boop_index
+        state.metadata['conversation_transcript'] = format_conversation(
+            state.metadata['conversation']
+        )
+
+        print(f"\nConversation ended after {turn} turns")
+        print(f"Session complete (end of line): {session_complete}")
+        print(f"Beep boop at conversation index: {beep_boop_index}\n")
+
+        return state
+
+    return solve
+
+
+@scorer(metrics=[mean(), stderr()])
+def reviewed_words_accuracy():
+    """Score based on which vocabulary words were reviewed after 'beep boop'.
+
+    Inspects bot messages between the 'beep boop' message and 'end of line'
+    to find which vocabulary words were mentioned during the review phase.
+    Computes precision and recall against the student's actual unknown words.
+    Returns recall as the primary metric.
+
+    Returns:
+        Scorer function for Inspect AI
+    """
+
+    async def score(state: TaskState, target: Any):
+        conversation = state.metadata.get('conversation', [])
+        beep_boop_index = state.metadata.get('beep_boop_index')
+        actual_missed = set(state.metadata.get('unknown_words', []))
+        original_words = [w.lower() for w in json.loads(state.input).keys()]
+
+        # Extract vocab words mentioned in bot messages after 'beep boop'
+        reviewed_words = set()
+        if beep_boop_index is not None:
+            review_messages = conversation[beep_boop_index + 1:]
+            for msg in review_messages:
+                if msg['role'] == 'assistant':
+                    for word in original_words:
+                        if word in msg['content'].lower():
+                            reviewed_words.add(word)
+
+        # Precision: of words the bot reviewed, how many were actually missed?
+        if reviewed_words:
+            correct_set = reviewed_words.intersection(actual_missed)
+            precision = len(correct_set) / len(reviewed_words)
+        else:
+            correct_set = set()
+            precision = 0.0
+
+        # Recall: of actually missed words, how many did the bot review?
+        if actual_missed:
+            correct_set = reviewed_words.intersection(actual_missed)
+            recall = len(correct_set) / len(actual_missed)
+        else:
+            recall = 1.0
+
+        if precision + recall > 0:
+            f1 = 2 * (precision * recall) / (precision + recall)
+        else:
+            f1 = 0.0
+
+        correct_set = reviewed_words.intersection(actual_missed)
+        false_positives = reviewed_words - actual_missed
+        false_negatives = actual_missed - reviewed_words
+
+        explanation = (
+            f'Words reviewed after beep boop: {", ".join(sorted(reviewed_words)) if reviewed_words else "none"}\n'
+            f'Actual unknown words (ground truth): {", ".join(sorted(actual_missed)) if actual_missed else "none"}\n'
+            f'Correctly reviewed: {", ".join(sorted(correct_set)) if correct_set else "none"}\n'
+            f'Reviewed but already known (false positives): {", ".join(sorted(false_positives)) if false_positives else "none"}\n'
+            f'Unknown but not reviewed (false negatives): {", ".join(sorted(false_negatives)) if false_negatives else "none"}\n'
+            f'Recall: {recall:.2f}, Precision: {precision:.2f}, F1: {f1:.2f}'
+        )
+
+        return Score(
+            value=recall,
+            explanation=explanation,
+            metadata={
+                'precision': precision,
+                'recall': recall,
+                'f1_score': f1,
+                'reviewed_words': list(reviewed_words),
+                'actual_missed': list(actual_missed),
+                'correct': list(correct_set),
+                'false_positives': list(false_positives),
+                'false_negatives': list(false_negatives),
+                'beep_boop_found': beep_boop_index is not None
+            }
+        )
+
+    return score
+
+
+@scorer(metrics=[mean(), stderr()])
+def bot_perceived_review_accuracy():
+    """Score review accuracy using bot-perceived quiz performance as ground truth.
+
+    Unlike reviewed_words_accuracy() which uses the simulated user's configured
+    known/unknown lists as ground truth, this scorer uses an LLM judge to
+    determine which words the bot perceived the student as struggling with
+    during the quiz phase. This avoids penalising the bot when a student
+    unexpectedly answers a word correctly despite being configured to 'not know' it.
+
+    The scorer:
+    1. Extracts the quiz-phase conversation (up to and including beep boop).
+    2. Calls an LLM judge to classify each vocabulary word as
+       'adequately_answered' or 'struggled' based on bot behaviour.
+    3. Computes precision, recall, and F1 against that bot-perceived ground truth.
+    4. Returns recall as the primary metric (matching reviewed_words_accuracy).
+
+    Returns:
+        Scorer function for Inspect AI
+    """
+
+    async def score(state: TaskState, target: Any):
+        conversation = state.metadata.get('conversation', [])
+        beep_boop_index = state.metadata.get('beep_boop_index')
+        vocab_dict = {k.lower(): v for k, v in json.loads(state.input).items()}
+        original_words = list(vocab_dict.keys())
+
+        # Split conversation at beep_boop_index
+        if beep_boop_index is not None:
+            quiz_messages = conversation[:beep_boop_index + 1]
+            review_messages = conversation[beep_boop_index + 1:]
+        else:
+            quiz_messages = conversation
+            review_messages = []
+
+        # Format quiz-phase transcript for LLM judge
+        quiz_lines = []
+        for msg in quiz_messages:
+            role = "Student" if msg['role'] == 'user' else "Bot"
+            quiz_lines.append(f"{role}: {msg['content']}")
+        quiz_transcript = "\n".join(quiz_lines)
+
+        # Call LLM judge to classify each word
+        judge_prompt = (
+            "You are evaluating a vocabulary quiz bot. "
+            "Your job is to determine which words the student adequately answered "
+            "during the quiz phase, based solely on bot behaviour.\n\n"
+            "The vocabulary words and their definitions are:\n"
+            f"{json.dumps(vocab_dict, indent=2)}\n\n"
+            "Here is the quiz-phase transcript (before the review segment):\n"
+            f"{quiz_transcript}\n\n"
+            "For each vocabulary word, classify it as EITHER:\n"
+            "- 'adequately_answered': The bot explicitly confirmed the student "
+            "was correct WITHOUT first giving hints or corrections. "
+            "Look for bot phrases like 'You've got it!', 'Exactly!', 'Spot on!', "
+            "'Perfect!', 'Correct!', 'Nicely done!', 'Yes!', 'Right!' "
+            "appearing as the FIRST substantive response to the student's answer "
+            "(not after hints). The confirmation should come before any teaching.\n"
+            "- 'struggled': The bot had to give hints, said 'Not quite', "
+            "offered corrections, asked follow-up questions to guide the student, "
+            "or had to explain/reveal the meaning before the student got it.\n\n"
+            "IMPORTANT: Judge by what the BOT DID, not by whether the student "
+            "technically knew the word. If the bot confirmed immediately without "
+            "hints, classify as 'adequately_answered' even if the student's "
+            "explanation was imprecise. If the bot gave any hint before confirming, "
+            "classify as 'struggled'.\n\n"
+            "Words not quizzed at all should be classified as 'struggled'.\n\n"
+            "Return ONLY a JSON array (no other text, no markdown fences):\n"
+            "[\n"
+            "  {\n"
+            '    "word": "vocabulary word (lowercase)",\n'
+            '    "status": "adequately_answered" | "struggled",\n'
+            '    "evidence": "brief quote or description from transcript supporting this"\n'
+            "  }\n"
+            "]\n\n"
+            f"Include ALL of these vocabulary words: {original_words}"
+        )
+
+        response = await acompletion(
+            model=CONFIG.get('judge_llm_model', CONFIG['eval_llm_model']),
+            messages=[{"role": "user", "content": judge_prompt}],
+            num_retries=5,
+        )
+        judge_response = response['choices'][0]['message']['content']
+
+        # Parse JSON response, stripping markdown code fences if present
+        word_assessments = []
+        parse_failed = False
+        try:
+            clean = judge_response.strip()
+            if clean.startswith('```'):
+                clean = clean.split('```')[1]
+                if clean.startswith('json'):
+                    clean = clean[4:]
+            word_assessments = json.loads(clean)
+        except (json.JSONDecodeError, IndexError, ValueError):
+            parse_failed = True
+
+        if parse_failed:
+            return Score(
+                value=0.0,
+                explanation=(
+                    "LLM judge response could not be parsed as JSON. "
+                    "Raw response:\n" + judge_response
+                ),
+                metadata={
+                    'parse_failed': True,
+                    'beep_boop_found': beep_boop_index is not None,
+                    'sim_unknown_words': list(state.metadata.get('unknown_words', [])),
+                }
+            )
+
+        # Build bot-perceived missed set
+        bot_perceived_missed = set()
+        for assessment in word_assessments:
+            word = assessment.get('word', '').lower().strip()
+            status = assessment.get('status', '')
+            if word in original_words and status == 'struggled':
+                bot_perceived_missed.add(word)
+
+        # Find words reviewed in review phase (same logic as reviewed_words_accuracy)
+        reviewed_words = set()
+        for msg in review_messages:
+            if msg['role'] == 'assistant':
+                for word in original_words:
+                    if word in msg['content'].lower():
+                        reviewed_words.add(word)
+
+        # Calculate precision, recall, F1
+        if reviewed_words:
+            correct_set = reviewed_words.intersection(bot_perceived_missed)
+            precision = len(correct_set) / len(reviewed_words)
+        else:
+            correct_set = set()
+            precision = 0.0
+
+        if bot_perceived_missed:
+            correct_set = reviewed_words.intersection(bot_perceived_missed)
+            recall = len(correct_set) / len(bot_perceived_missed)
+        else:
+            recall = 1.0
+
+        if precision + recall > 0:
+            f1 = 2 * (precision * recall) / (precision + recall)
+        else:
+            f1 = 0.0
+
+        correct_set = reviewed_words.intersection(bot_perceived_missed)
+        false_positives = reviewed_words - bot_perceived_missed
+        false_negatives = bot_perceived_missed - reviewed_words
+
+        explanation = (
+            f'Bot-perceived struggled words (LLM judge ground truth): '
+            f'{", ".join(sorted(bot_perceived_missed)) if bot_perceived_missed else "none"}\n'
+            f'Words reviewed after beep boop: '
+            f'{", ".join(sorted(reviewed_words)) if reviewed_words else "none"}\n'
+            f'Correctly reviewed: '
+            f'{", ".join(sorted(correct_set)) if correct_set else "none"}\n'
+            f'Reviewed but bot-perceived as known (false positives): '
+            f'{", ".join(sorted(false_positives)) if false_positives else "none"}\n'
+            f'Struggled but not reviewed (false negatives): '
+            f'{", ".join(sorted(false_negatives)) if false_negatives else "none"}\n'
+            f'Recall: {recall:.2f}, Precision: {precision:.2f}, F1: {f1:.2f}\n\n'
+            f'--- LLM judge word-by-word assessment ---\n'
+            + "\n".join(
+                f'  {a.get("word","?")}: {a.get("status","?")} — {a.get("evidence","")}'
+                for a in word_assessments
+            )
+        )
+
+        return Score(
+            value=recall,
+            explanation=explanation,
+            metadata={
+                'precision': precision,
+                'recall': recall,
+                'f1_score': f1,
+                'reviewed_words': list(reviewed_words),
+                'bot_perceived_missed': list(bot_perceived_missed),
+                'sim_unknown_words': list(state.metadata.get('unknown_words', [])),
+                'correct': list(correct_set),
+                'false_positives': list(false_positives),
+                'false_negatives': list(false_negatives),
+                'beep_boop_found': beep_boop_index is not None,
+                'word_assessments': word_assessments,
+                'parse_failed': False,
+            }
+        )
+
+    return score
+
+
 @scorer(metrics=[mean(), stderr()])
 def words_covered_rate_bot_perception():
     """Score based on bot's self-reported vocabulary coverage.
@@ -387,30 +871,31 @@ def words_covered_rate_bot_perception():
         # Extract word list from bot's final response
         final_response = state.metadata.get('final_word_list', '')
 
-        # Parse the word list (expecting Python list format)
-        bot_words = list(
-            final_response.strip()
-            .replace('[', '').replace(']', '')
-            .replace("'", '').replace('"', '')
-            .replace(' ', '').split(',')
-        )
-
         # Get original vocabulary words
         original_words = json.loads(state.input).keys()
         original_words = [word.lower() for word in original_words]
 
-        # Calculate coverage
-        covered_words = set(bot_words).intersection(set(original_words))
+        # Check which original words appear in the bot's final response (substring match)
+        covered_words = set()
+        for word in original_words:
+            if word in final_response.lower():
+                covered_words.add(word)
+
         words_covered_rate = (
             len(covered_words) / len(original_words)
             if original_words else 0
         )
 
+        conversation_transcript = state.metadata.get('conversation_transcript', '')
+        final_request = state.metadata.get('final_word_list_request', '')
+
         return Score(
             value=words_covered_rate,
             explanation=(
-                f'Bot reports covering: {", ".join(bot_words)}\n'
-                f'Actually covered: {", ".join(covered_words)}'
+                f'Bot reports covering: {", ".join(covered_words)}\n\n'
+                f'--- Final request sent to bot ---\n{final_request}\n\n'
+                f'--- Bot response to final request ---\n{final_response}\n\n'
+                f'--- Quiz conversation transcript ---\n{conversation_transcript}'
             )
         )
 
@@ -446,9 +931,18 @@ def words_covered_rate_ground_truth():
             if original_words else 0
         )
 
+        conversation_transcript = state.metadata.get('conversation_transcript', '')
+        final_request = state.metadata.get('final_word_list_request', '')
+        final_response = state.metadata.get('final_word_list', '')
+
         return Score(
             value=words_covered_rate,
-            explanation=f'Bot mentioned during session: {", ".join(covered_words)}'
+            explanation=(
+                f'Bot mentioned during session: {", ".join(covered_words)}\n\n'
+                f'--- Final request sent to bot ---\n{final_request}\n\n'
+                f'--- Bot response to final request ---\n{final_response}\n\n'
+                f'--- Quiz conversation transcript ---\n{conversation_transcript}'
+            )
         )
 
     return score
@@ -506,13 +1000,20 @@ def missed_words_recall_accuracy():
         false_positives = bot_recalled_missed - actual_missed
         false_negatives = actual_missed - bot_recalled_missed
 
+        conversation_transcript = state.metadata.get('conversation_transcript', '')
+        recall_request = state.metadata.get('missed_words_recall_request', '')
+        recall_response = state.metadata.get('missed_words_recall', '')
+
         explanation = (
             f'Bot recalled as missed: {", ".join(sorted(bot_recalled_missed)) if bot_recalled_missed else "none"}\n'
             f'Actually missed (ground truth): {", ".join(sorted(actual_missed)) if actual_missed else "none"}\n'
             f'Correctly identified: {", ".join(sorted(correct_set)) if correct_set else "none"}\n'
             f'False positives: {", ".join(sorted(false_positives)) if false_positives else "none"}\n'
             f'False negatives: {", ".join(sorted(false_negatives)) if false_negatives else "none"}\n'
-            f'Recall: {recall:.2f}, Precision: {precision:.2f}, F1: {f1_score:.2f}'
+            f'Recall: {recall:.2f}, Precision: {precision:.2f}, F1: {f1_score:.2f}\n\n'
+            f'--- Recall request sent to bot ---\n{recall_request}\n\n'
+            f'--- Bot response to recall request ---\n{recall_response}\n\n'
+            f'--- Quiz conversation transcript ---\n{conversation_transcript}'
         )
 
         # Return recall as the primary metric
@@ -535,6 +1036,122 @@ def missed_words_recall_accuracy():
     return score
 
 
+@scorer(metrics=[mean(), stderr()])
+def hint_quality_scorer():
+    """Score based on how indirect (non-definition-revealing) hints are.
+
+    Uses an LLM judge to scan the conversation transcript, identify every
+    hint the bot gave, and flag any that essentially state or closely
+    paraphrase the dictionary definition.
+
+    Score = fraction of hints that are appropriately indirect (0–1).
+    A score of 1.0 means all hints were well-crafted; lower scores indicate
+    the bot is giving away definitions instead of guiding the student.
+    If no hints were given the score is 1.0.
+
+    Returns:
+        Scorer function for Inspect AI
+    """
+
+    async def score(state: TaskState, target: Any):
+        vocab_dict = {k.lower(): v for k, v in json.loads(state.input).items()}
+        conversation_transcript = state.metadata.get('conversation_transcript', '')
+
+        # Ask LLM judge to extract all hints and assess quality in one call
+        judge_prompt = (
+            "You are evaluating the hint quality of a vocabulary quiz bot.\n\n"
+            "The bot is quizzing a student on these vocabulary words and definitions:\n"
+            f"{json.dumps(vocab_dict, indent=2)}\n\n"
+            "Here is the conversation transcript:\n"
+            f"{conversation_transcript}\n\n"
+            'A "hint" is any bot message where the bot helps the student figure out '
+            "a word's meaning without directly asking them to define it. This includes:\n"
+            "- Giving a contextual clue or example sentence\n"
+            "- Pointing to etymology or word parts\n"
+            "- Describing the concept without naming it\n"
+            "- Offering a related concept or analogy\n\n"
+            'A hint is "too direct" if it essentially states or closely paraphrases '
+            'the dictionary definition (e.g. for "predilection" whose definition is '
+            '"an established preference for something", a too-direct hint would be '
+            '"think about a strong preference you have for something").\n\n'
+            "Identify ALL hints in the transcript and rate each one.\n"
+            "Return ONLY a JSON array (no other text):\n"
+            "[\n"
+            "  {\n"
+            '    "word": "the vocabulary word being hinted at",\n'
+            '    "hint_text": "the exact hint text from the conversation",\n'
+            '    "too_direct": true or false,\n'
+            '    "reasoning": "brief explanation"\n'
+            "  }\n"
+            "]\n\n"
+            "If no hints were given, return an empty array: []"
+        )
+
+        response = await acompletion(
+            model=CONFIG['eval_llm_model'],
+            messages=[{"role": "user", "content": judge_prompt}],
+            num_retries=5,
+        )
+        judge_response = response['choices'][0]['message']['content']
+
+        # Parse JSON response, stripping markdown code fences if present
+        try:
+            clean = judge_response.strip()
+            if clean.startswith('```'):
+                clean = clean.split('```')[1]
+                if clean.startswith('json'):
+                    clean = clean[4:]
+            hints = json.loads(clean)
+        except (json.JSONDecodeError, IndexError, ValueError):
+            hints = []
+
+        # Score = fraction of hints that are appropriately indirect
+        if not hints:
+            score_val = 1.0
+            explanation = "No hints were identified in the conversation."
+        else:
+            too_direct = [h for h in hints if h.get('too_direct', False)]
+            indirect = [h for h in hints if not h.get('too_direct', False)]
+            score_val = len(indirect) / len(hints)
+
+            lines = [
+                f"Total hints: {len(hints)}",
+                f"Appropriately indirect: {len(indirect)}",
+                f"Too direct (reveals definition): {len(too_direct)}",
+                f"Hint quality score: {score_val:.2f}",
+                "",
+            ]
+            if too_direct:
+                lines.append("TOO DIRECT hints:")
+                for h in too_direct:
+                    lines.append(f"  Word: {h.get('word', '?')}")
+                    lines.append(f"  Hint: {h.get('hint_text', '?')[:200]}")
+                    lines.append(f"  Reason: {h.get('reasoning', '')}")
+                    lines.append("")
+            if indirect:
+                lines.append("GOOD (indirect) hints:")
+                for h in indirect:
+                    lines.append(f"  Word: {h.get('word', '?')}")
+                    lines.append(f"  Hint: {h.get('hint_text', '?')[:200]}")
+                    lines.append(f"  Reason: {h.get('reasoning', '')}")
+                    lines.append("")
+            lines.append(f"--- Quiz conversation transcript ---\n{conversation_transcript}")
+            explanation = "\n".join(lines)
+
+        return Score(
+            value=score_val,
+            explanation=explanation,
+            metadata={
+                'hints': hints,
+                'total_hints': len(hints),
+                'too_direct_count': len([h for h in hints if h.get('too_direct', False)]),
+                'indirect_count': len([h for h in hints if not h.get('too_direct', False)]),
+            }
+        )
+
+    return score
+
+
 if __name__ == "__main__":
     # Run evaluation
     print(f"\n{'='*60}")
@@ -542,13 +1159,21 @@ if __name__ == "__main__":
     print(f"Architecture: {CONFIG['architecture']}")
     print(f"{'='*60}\n")
 
+    # Resolve log directory (optional subdirectory for experiment organization)
+    log_subdir = CONFIG.get('log_subdir')
+    eval_kwargs = {"log_dir": f"logs/{log_subdir}"} if log_subdir else None
+
     # Run completion rate evaluation
     print("\n--- Running Completion Rate Evaluation ---\n")
-    result1 = eval(unified_completion_rate())
+    result1 = eval(unified_completion_rate(), **eval_kwargs)
 
-    # Run recall accuracy evaluation
-    print("\n--- Running Recall Accuracy Evaluation ---\n")
-    result2 = eval(unified_recall_accuracy())
+    # # Run recall accuracy evaluation
+    # print("\n--- Running Recall Accuracy Evaluation ---\n")
+    # result2 = eval(unified_recall_accuracy(), **eval_kwargs)
+
+    # Run review accuracy evaluation
+    print("\n--- Running Review Accuracy Evaluation ---\n")
+    result3 = eval(unified_review_accuracy(), **eval_kwargs)
 
     print(f"\n{'='*60}")
     print(f"Evaluation Complete")

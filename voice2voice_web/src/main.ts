@@ -13,8 +13,49 @@ const startStudyButton = document.getElementById('start-study-button') as HTMLBu
 const loginError = document.getElementById('login-error');
 const wordError = document.getElementById('word-error');
 const statusDiv = document.getElementById('status');
+const audioStateEl = document.getElementById('audio-state');
+const transcriptPanel = document.getElementById('transcript-panel');
+const transcriptEntries = document.getElementById('transcript-entries');
 
 let sessionToken: string | null = null;
+
+// --- Audio state indicator ---
+function setAudioState(state: 'listening' | 'speaking' | 'interrupted') {
+  if (!audioStateEl) return;
+  audioStateEl.className = `audio-state ${state}`;
+  const labels = { listening: '● Listening', speaking: '● Speaking', interrupted: '⚠ Interrupted' };
+  audioStateEl.textContent = labels[state];
+  if (state === 'interrupted') {
+    setTimeout(() => setAudioState('listening'), 2000);
+  }
+}
+
+// --- Live transcript ---
+let lastHistory: any[] = [];
+let currentBotText = '';
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderTranscript(history: any[], inProgressText = '') {
+  if (!transcriptEntries || !transcriptPanel) return;
+  const items = history
+    .filter(item => item.role === 'user' || item.role === 'assistant')
+    .map(item => {
+      const text = item.content?.map((c: any) => c.transcript ?? c.text ?? '').join('') ?? '';
+      if (!text) return '';
+      const icon = item.role === 'user' ? '🎤' : '🤖';
+      const cls = item.role === 'assistant' ? 'assistant' : 'user';
+      return `<div class="transcript-entry ${cls}"><span class="role">${icon}</span><span>${escapeHtml(text)}</span></div>`;
+    })
+    .filter(Boolean);
+  if (inProgressText) {
+    items.push(`<div class="transcript-entry assistant"><span class="role">🤖</span><span>${escapeHtml(inProgressText)}<span class="cursor">▋</span></span></div>`);
+  }
+  transcriptEntries.innerHTML = items.join('');
+  transcriptPanel.scrollTop = transcriptPanel.scrollHeight;
+}
 
 // Load prompt template
 async function loadPromptTemplate(): Promise<string> {
@@ -144,9 +185,34 @@ async function startVoiceAgent(vocabDict: Record<string, string>) {
   
   console.log('Connecting session...');
   await session.connect({ apiKey: sessionToken });
-  
+
+  session.on('transport_event', (event: any) => {
+    if (event.type === 'conversation.item.input_audio_transcription.completed') {
+      console.log('[User said]', event.transcript);
+    }
+    if (event.type === 'response.output_audio_transcript.delta') {
+      setAudioState('speaking');
+      currentBotText += event.delta ?? '';
+      renderTranscript(lastHistory, currentBotText);
+    }
+    if (event.type === 'response.cancelled') {
+      console.warn('[Audio] Response cancelled');
+      setAudioState('interrupted');
+    }
+  });
+
+  session.on('history_updated', (history: any[]) => {
+    lastHistory = history;
+    currentBotText = '';
+    setAudioState('listening');
+    renderTranscript(history);
+  });
+
   console.log('✅ Session connected successfully!');
   setStatus('🎤 Connected! Start talking.', 'connected');
+  if (audioStateEl) audioStateEl.style.display = 'inline-block';
+  if (transcriptPanel) transcriptPanel.style.display = 'block';
+  setAudioState('listening');
 }
 
 // Handle connect button click (Step 1: Login)

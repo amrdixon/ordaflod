@@ -104,6 +104,56 @@
       font-size: 14px;
       margin: 0;
     }
+
+    .audio-state {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .audio-state.listening { background: #f0f0f0; color: #666; }
+    .audio-state.speaking  { background: #d4edda; color: #155724; animation: pulse 1.2s ease-in-out infinite; }
+    .audio-state.interrupted { background: #f8d7da; color: #721c24; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    #transcript-panel {
+      margin-top: 16px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      max-height: 320px;
+      overflow-y: auto;
+      background: #fafafa;
+    }
+
+    #transcript-entries {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 40px;
+    }
+
+    .transcript-entry {
+      display: flex;
+      gap: 8px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .transcript-entry.assistant { color: #0051cc; }
+    .transcript-entry.user { color: #333; }
+    .transcript-entry .role { flex-shrink: 0; }
+
+    .cursor { animation: blink 1s step-end infinite; }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
   </style>
 </head>
 <body>
@@ -140,9 +190,13 @@
       <div id="status" class="status connecting">
         Preparing your study session...
       </div>
+      <div id="audio-state" class="audio-state listening" style="display:none">● Listening</div>
       <p style="color: #666; margin-top: 15px; font-size: 14px;">
         💡 The agent is listening through your microphone. Just start speaking naturally!
       </p>
+      <div id="transcript-panel" style="display:none">
+        <div id="transcript-entries"></div>
+      </div>
     </div>
   </div>
 

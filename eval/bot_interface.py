@@ -67,6 +67,16 @@ class VocabBotInterface(ABC):
         pass
 
     @abstractmethod
+    def get_token_usage(self) -> Dict[str, int]:
+        """Get cumulative token usage for the bot session so far.
+
+        Returns:
+            Dict with keys 'input', 'output', 'total' (all ints).
+            Returns zeros if the architecture does not report token usage.
+        """
+        pass
+
+    @abstractmethod
     async def cleanup(self) -> None:
         """Clean up any resources held by the bot.
 

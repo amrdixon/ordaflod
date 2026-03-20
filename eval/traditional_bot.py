@@ -20,6 +20,8 @@ class TraditionalBot(VocabBotInterface):
         self.model = model
         self.conversation_history = []
         self.initialized = False
+        self._input_tokens = 0
+        self._output_tokens = 0
 
     async def initialize(self, prompt: str, vocab_dict: Dict[str, str]) -> None:
         """Initialize with system prompt and vocabulary dictionary.
@@ -66,6 +68,11 @@ class TraditionalBot(VocabBotInterface):
             messages=self.conversation_history
         )
 
+        # Accumulate token usage
+        usage = response.get('usage', {})
+        self._input_tokens += usage.get('prompt_tokens', 0)
+        self._output_tokens += usage.get('completion_tokens', 0)
+
         # Extract assistant message
         assistant_message = response['choices'][0]['message']['content']
 
@@ -103,6 +110,14 @@ class TraditionalBot(VocabBotInterface):
             last_msg['role'] == 'assistant' and
             'beep boop' in last_msg['content'].lower()
         )
+
+    def get_token_usage(self) -> Dict[str, int]:
+        """Get cumulative token usage across all turns so far."""
+        return {
+            'input': self._input_tokens,
+            'output': self._output_tokens,
+            'total': self._input_tokens + self._output_tokens,
+        }
 
     async def cleanup(self) -> None:
         """Clean up resources (no-op for stateless API)."""

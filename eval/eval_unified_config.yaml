@@ -2,31 +2,44 @@
 # Supports both traditional (Claude/LiteLLM) and realtime (OpenAI Realtime API) architectures
 
 # Select which architecture to test: "traditional" or "realtime"
-architecture: "realtime"
+architecture: "traditional"
+
+# Path to .env file containing API keys
+env_file: "../.env"
+
+# Vocabulary dataset (shared across all architectures and evaluation)
+vocab_fp: "../traditional_speech_art/data/vocab_words3.json"
+vocab_key: "list3"
 
 # Traditional architecture configuration (Claude + LiteLLM)
 traditional:
-  model: "anthropic/claude-sonnet-4-5-20250929"
+  api_key_env: "OPENAI_API_KEY"
+  model: "openai/gpt-4o"
   prompt_fp: "../traditional_speech_art/prompt.md"
-  vocab_list_fp: "../traditional_speech_art/data/vocab_words.json"
-  vocab_list_key: "list1"
 
 # Realtime architecture configuration (OpenAI Realtime API)
 realtime:
-  # API key loaded from environment variable
   api_key_env: "OPENAI_API_KEY"
   prompt_fp: "../voice2voice_web/public/prompt2.md"
-  vocab_list_fp: "../traditional_speech_art/data/vocab_words.json"
-  vocab_list_key: "list1"
 
 # Evaluation settings (shared across both architectures)
-eval_llm_model: "anthropic/claude-sonnet-4-5-20250929"
-eval_dataset_fp: "../traditional_speech_art/data/vocab_eval_dataset.csv"
+eval_llm_model: "gemini/gemini-2.5-flash"
+
+# Model used specifically for bot_perceived_review_accuracy LLM judge.
+# Uses a separate key to avoid vendor bias (judge should be independent of the vocab bot vendor).
+judge_llm_model: "anthropic/claude-sonnet-4-6"
 
 # Simulated user bot settings (shared)
-user_bot_llm: "openai/gpt-4o"
+user_bot_llm: "gemini/gemini-2.5-flash"
 user_bot_prompt_fp: "simulated_user_prompt.txt"
 user_bot_percent_words_correct: 0.7
 
 # Conversation settings
-max_turns: 30
+max_turns: 40
+epochs: 10
+
+# Logging settings
+# Optional: set log_subdir to a string (e.g. "experiment1") to organize logs into logs/<subdir>/
+# Leave as null to use the default logs/ directory
+log_subdir: null
+
