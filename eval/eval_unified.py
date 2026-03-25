@@ -147,10 +147,21 @@ def unified_completion_rate() -> Task:
     """
     user_model, user_prompt_template, vocab_words = setup_user_bot()
 
+    arch_cfg = CONFIG.get(CONFIG["architecture"], {})
     return Task(
         name=f"Unified Completion Rate Evaluation ({CONFIG['architecture']})",
         dataset=[Sample(input=json.dumps(vocab_words))],
         epochs=CONFIG['epochs'],
+        metadata={
+            "architecture": CONFIG["architecture"],
+            "model": arch_cfg.get("model", "n/a"),
+            "eval_llm_model": CONFIG["eval_llm_model"],
+            "judge_llm_model": CONFIG["judge_llm_model"],
+            "user_bot_llm": CONFIG["user_bot_llm"],
+            "user_bot_percent_words_correct": CONFIG["user_bot_percent_words_correct"],
+            "bot_prompt_fp": arch_cfg.get("prompt_fp", "n/a"),
+            "user_bot_prompt_fp": CONFIG["user_bot_prompt_fp"],
+        },
         solver=[
             unified_simulated_conversation(user_prompt_template, vocab_words, user_model),
             unified_final_word_list_request(),
@@ -186,10 +197,21 @@ def unified_review_accuracy() -> Task:
         "missed or tricky words, always reply with a simple yes."
     )
 
+    arch_cfg = CONFIG.get(CONFIG["architecture"], {})
     return Task(
         name=f"Unified Review Accuracy Evaluation ({CONFIG['architecture']})",
         dataset=[Sample(input=json.dumps(vocab_words))],
         epochs=CONFIG['epochs'],
+        metadata={
+            "architecture": CONFIG["architecture"],
+            "model": arch_cfg.get("model", "n/a"),
+            "eval_llm_model": CONFIG["eval_llm_model"],
+            "judge_llm_model": CONFIG["judge_llm_model"],
+            "user_bot_llm": CONFIG["user_bot_llm"],
+            "user_bot_percent_words_correct": CONFIG["user_bot_percent_words_correct"],
+            "bot_prompt_fp": arch_cfg.get("prompt_fp", "n/a"),
+            "user_bot_prompt_fp": CONFIG["user_bot_prompt_fp"],
+        },
         solver=[
             review_simulated_conversation(review_template, vocab_words, user_model),
             cleanup_bot()
@@ -340,7 +362,6 @@ def unified_simulated_conversation(
                 )
 
         # Store final state information
-        state.metadata['bot_history'] = bot.get_history()
         state.metadata['session_complete'] = session_complete
         state.metadata['turns'] = turn
         state.metadata['conversation_transcript'] = format_conversation(
@@ -569,7 +590,6 @@ def review_simulated_conversation(
                             f"Full response: {user_response['choices'][0]['message']}"
                         )
 
-        state.metadata['bot_history'] = bot.get_history()
         state.metadata['session_complete'] = session_complete
         state.metadata['turns'] = turn
         state.metadata['beep_boop_index'] = beep_boop_index
@@ -875,7 +895,7 @@ def words_covered_rate_bot_perception():
         original_words = json.loads(state.input).keys()
         original_words = [word.lower() for word in original_words]
 
-        # Check which original words appear in the bot's final response (substring match)
+        # Check which original words appear in the bot's final response
         covered_words = set()
         for word in original_words:
             if word in final_response.lower():
@@ -932,15 +952,11 @@ def words_covered_rate_ground_truth():
         )
 
         conversation_transcript = state.metadata.get('conversation_transcript', '')
-        final_request = state.metadata.get('final_word_list_request', '')
-        final_response = state.metadata.get('final_word_list', '')
 
         return Score(
             value=words_covered_rate,
             explanation=(
                 f'Bot mentioned during session: {", ".join(covered_words)}\n\n'
-                f'--- Final request sent to bot ---\n{final_request}\n\n'
-                f'--- Bot response to final request ---\n{final_response}\n\n'
                 f'--- Quiz conversation transcript ---\n{conversation_transcript}'
             )
         )
