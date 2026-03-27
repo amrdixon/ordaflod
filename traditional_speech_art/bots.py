@@ -10,6 +10,7 @@ import threading
 import queue
 from dotenv import load_dotenv
 import yaml
+from langfuse import observe, get_client as _get_langfuse_client
 
 # Load configuration
 with open('config.yaml', 'r') as f:
@@ -17,6 +18,10 @@ with open('config.yaml', 'r') as f:
 
 ## set ENV variables
 os.environ["ANTHROPIC_API_KEY"] = os.getenv("ANTHROPIC_API_KEY")
+
+# Langfuse client — only active if credentials are set in .env
+_langfuse_enabled = bool(os.getenv("LANGFUSE_SECRET_KEY"))
+_lf = _get_langfuse_client() if _langfuse_enabled else None
 
 #Define fopath for whiseper model
 WHISPER_MODEL_FP = "./models/whisper/base.pt"
@@ -49,6 +54,7 @@ class VocabStudyBot:
 
             #Initialize conversation history
             self.conversation_history = []
+            self._turn_count = 0
 
             #Create studybot prompt
             self.prompt = load_prompt(CONFIG['prompt_fp'], self.vocab_dict)
@@ -67,6 +73,7 @@ class VocabStudyBot:
             initial_response = self._get_model_response()
             self.last_response = initial_response
 
+    @observe(as_type='generation', capture_input=False, capture_output=False)
     def _get_model_response(self):
 
         response = completion(
@@ -75,11 +82,25 @@ class VocabStudyBot:
         )
         assistant_message = response['choices'][0]['message']['content']
 
+        if _langfuse_enabled:
+            usage = response.get('usage', {})
+            _lf.update_current_generation(
+                name=f"turn-{self._turn_count}",
+                model=CONFIG['llm_model'],
+                input=self.conversation_history,
+                output=assistant_message,
+                usage_details={
+                    "input": usage.get('prompt_tokens', 0),
+                    "output": usage.get('completion_tokens', 0),
+                }
+            )
+        self._turn_count += 1
+
          #Add assistant message to conversation history
         self.conversation_history.append({
               "role": "assistant",
               "content": assistant_message})
-        
+
         return assistant_message
 
     def send_message(self, user_message: str) -> str:
@@ -102,8 +123,19 @@ class VocabStudyBot:
 
 class SpeechVocabBot:
     """Speech-enabled wrapper with real-time VAD and interruption."""
-    
+
     def __init__(self, word_list: list[str]):
+        # Open a session-level span before constructing the bot so the initial
+        # greeting LLM call is captured as a child of this trace.
+        if _langfuse_enabled:
+            self._session_ctx = _lf.start_as_current_observation(
+                name="vocab-quiz-session",
+                metadata={"word_count": len(word_list), "source": "production"}
+            )
+            self._session_ctx.__enter__()
+        else:
+            self._session_ctx = None
+
         self.bot = VocabStudyBot(word_list)
         
         # Initialize STT model (Whisper)
@@ -313,7 +345,12 @@ class SpeechVocabBot:
         farewell = "Thank you for studying with me today. Keep practicing!"
         print(f"\n🤖 Bot: {farewell}")
         self.speak(farewell)
-        
+
+        # Close the session span and flush all traces
+        if _langfuse_enabled and self._session_ctx:
+            self._session_ctx.__exit__(None, None, None)
+            _lf.flush()
+
         # Cleanup any temp files
         if os.path.exists(self.recording_path):
             os.remove(self.recording_path)

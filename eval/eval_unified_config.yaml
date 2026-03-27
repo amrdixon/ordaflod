@@ -36,7 +36,7 @@ user_bot_percent_words_correct: 0.7
 
 # Conversation settings
 max_turns: 40
-epochs: 10
+epochs: 2
 
 # Logging settings
 # Optional: set log_subdir to a string (e.g. "experiment1") to organize logs into logs/<subdir>/
