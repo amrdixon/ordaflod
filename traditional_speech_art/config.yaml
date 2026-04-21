@@ -2,3 +2,7 @@ llm_model: "anthropic/claude-sonnet-4-5-20250929"
 prompt_fp: "prompt.md"
 vocab_list_fp: "data/vocab_words.json"
 vocab_list_key: "list1"
+
+#Langfuse tracing/eval
+eval_llm_model: "gemini/gemini-2.5-flash"
+judge_llm_model: "anthropic/claude-sonnet-4-6"

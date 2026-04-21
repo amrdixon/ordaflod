@@ -1,6 +1,6 @@
 from bot_interface import VocabBotInterface
 from litellm import completion
-from typing import List, Dict
+from typing import List, Dict, Optional
 import json
 import os
 from langfuse import observe, get_client as _get_langfuse_client
@@ -35,6 +35,7 @@ class TraditionalBot(VocabBotInterface):
         self._output_tokens = 0
         self._turn_count = 0
         self._session_ctx = None
+        self._trace_id: Optional[str] = None
 
     async def initialize(self, prompt: str, vocab_dict: Dict[str, str]) -> None:
         """Initialize with system prompt and vocabulary dictionary.
@@ -59,9 +60,11 @@ class TraditionalBot(VocabBotInterface):
         if _langfuse_enabled:
             self._session_ctx = _lf.start_as_current_observation(
                 name="eval-vocab-quiz-session",
+                input={"vocab": vocab_dict},
                 metadata={"word_count": len(vocab_dict), "source": "eval", "model": self.model}
             )
             self._session_ctx.__enter__()
+            self._trace_id = _lf.get_current_trace_id()
 
     async def send_message(self, message: str) -> str:
         """Send a user message and get the bot's response.
@@ -159,6 +162,10 @@ class TraditionalBot(VocabBotInterface):
             'output': self._output_tokens,
             'total': self._input_tokens + self._output_tokens,
         }
+
+    def get_trace_id(self) -> Optional[str]:
+        """Return the Langfuse trace ID captured during initialize()."""
+        return self._trace_id
 
     async def cleanup(self) -> None:
         """Clean up resources."""

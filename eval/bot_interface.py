@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 class VocabBotInterface(ABC):
     """Abstract interface for vocabulary bot implementations.
@@ -74,6 +74,11 @@ class VocabBotInterface(ABC):
             Dict with keys 'input', 'output', 'total' (all ints).
             Returns zeros if the architecture does not report token usage.
         """
+        pass
+
+    @abstractmethod
+    def get_trace_id(self) -> Optional[str]:
+        """Return the Langfuse trace ID for this session, or None if tracing is disabled."""
         pass
 
     @abstractmethod

@@ -327,6 +327,10 @@ class RealtimeBot(VocabBotInterface):
             'total': self._input_tokens + self._output_tokens,
         }
 
+    def get_trace_id(self) -> Optional[str]:
+        """RealtimeBot does not have Langfuse tracing; returns None."""
+        return None
+
     def is_session_complete(self) -> bool:
         """Check if bot has signaled session completion via 'beep boop'.
 

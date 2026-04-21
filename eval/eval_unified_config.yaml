@@ -8,8 +8,8 @@ architecture: "traditional"
 env_file: "../.env"
 
 # Vocabulary dataset (shared across all architectures and evaluation)
-vocab_fp: "../traditional_speech_art/data/vocab_words3.json"
-vocab_key: "list3"
+vocab_fp: "../traditional_speech_art/data/vocab_words4.json"
+vocab_key: "list4"
 
 # Traditional architecture configuration (Claude + LiteLLM)
 traditional:
@@ -36,7 +36,7 @@ user_bot_percent_words_correct: 0.7
 
 # Conversation settings
 max_turns: 40
-epochs: 2
+epochs: 4
 
 # Logging settings
 # Optional: set log_subdir to a string (e.g. "experiment1") to organize logs into logs/<subdir>/

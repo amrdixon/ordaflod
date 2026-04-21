@@ -27,6 +27,25 @@ with open("eval_unified_config.yaml") as f:
 # Load API keys from .env file specified in config
 load_dotenv(CONFIG['env_file'])
 
+from langfuse import get_client as _get_langfuse_client
+_langfuse_enabled = bool(os.getenv("LANGFUSE_SECRET_KEY"))
+_lf = _get_langfuse_client() if _langfuse_enabled else None
+
+
+def _push_langfuse_score(trace_id, name, value, comment=None):
+    if not _langfuse_enabled or not _lf or not trace_id:
+        return
+    try:
+        _lf.create_score(
+            trace_id=trace_id,
+            name=name,
+            value=value,
+            data_type="NUMERIC",
+            comment=comment[:1000] if comment else None,
+        )
+    except Exception:
+        logger.warning(f"Failed to push Langfuse score '{name}' for trace {trace_id}", exc_info=True)
+
 
 def format_conversation(conversation: list) -> str:
     """Format a conversation list as a readable transcript string."""
@@ -280,6 +299,7 @@ def unified_simulated_conversation(
 
         # Initialize bot with prompt and vocabulary
         await bot.initialize(prompt, vocab_dict)
+        state.metadata['langfuse_trace_id'] = bot.get_trace_id()
 
         # Store bot instance in metadata for reuse in next solver
         state.metadata['bot_instance'] = bot
@@ -511,6 +531,7 @@ def review_simulated_conversation(
         bot = create_vocab_bot()
         prompt, vocab_dict = load_bot_config()
         await bot.initialize(prompt, vocab_dict)
+        state.metadata['langfuse_trace_id'] = bot.get_trace_id()
 
         state.metadata['bot_instance'] = bot
         state.metadata['known_words'] = [w.lower() for w in known_words]
@@ -668,6 +689,12 @@ def reviewed_words_accuracy():
             f'Recall: {recall:.2f}, Precision: {precision:.2f}, F1: {f1:.2f}'
         )
 
+        _push_langfuse_score(
+            state.metadata.get('langfuse_trace_id'),
+            name="reviewed_words_accuracy_recall",
+            value=recall,
+            comment=f"Recall: {recall:.2f}, Precision: {precision:.2f}, F1: {f1:.2f}",
+        )
         return Score(
             value=recall,
             explanation=explanation,
@@ -786,6 +813,12 @@ def bot_perceived_review_accuracy():
             parse_failed = True
 
         if parse_failed:
+            _push_langfuse_score(
+                state.metadata.get('langfuse_trace_id'),
+                name="bot_perceived_review_accuracy_recall",
+                value=0.0,
+                comment="LLM judge response could not be parsed as JSON.",
+            )
             return Score(
                 value=0.0,
                 explanation=(
@@ -857,6 +890,12 @@ def bot_perceived_review_accuracy():
             )
         )
 
+        _push_langfuse_score(
+            state.metadata.get('langfuse_trace_id'),
+            name="bot_perceived_review_accuracy_recall",
+            value=recall,
+            comment=f"Recall: {recall:.2f}, Precision: {precision:.2f}, F1: {f1:.2f}",
+        )
         return Score(
             value=recall,
             explanation=explanation,
@@ -909,6 +948,12 @@ def words_covered_rate_bot_perception():
         conversation_transcript = state.metadata.get('conversation_transcript', '')
         final_request = state.metadata.get('final_word_list_request', '')
 
+        _push_langfuse_score(
+            state.metadata.get('langfuse_trace_id'),
+            name="words_covered_rate_bot_perception",
+            value=words_covered_rate,
+            comment=f"Covered {len(covered_words)}/{len(original_words)} words",
+        )
         return Score(
             value=words_covered_rate,
             explanation=(
@@ -953,6 +998,12 @@ def words_covered_rate_ground_truth():
 
         conversation_transcript = state.metadata.get('conversation_transcript', '')
 
+        _push_langfuse_score(
+            state.metadata.get('langfuse_trace_id'),
+            name="words_covered_rate_ground_truth",
+            value=words_covered_rate,
+            comment=f"Mentioned {len(covered_words)}/{len(original_words)} words",
+        )
         return Score(
             value=words_covered_rate,
             explanation=(
@@ -1034,6 +1085,12 @@ def missed_words_recall_accuracy():
 
         # Return recall as the primary metric
         # (What fraction of actually-missed words did the bot correctly identify?)
+        _push_langfuse_score(
+            state.metadata.get('langfuse_trace_id'),
+            name="missed_words_recall_accuracy_recall",
+            value=recall,
+            comment=f"Recall: {recall:.2f}, Precision: {precision:.2f}, F1: {f1_score:.2f}",
+        )
         return Score(
             value=recall,
             explanation=explanation,
@@ -1154,6 +1211,12 @@ def hint_quality_scorer():
             lines.append(f"--- Quiz conversation transcript ---\n{conversation_transcript}")
             explanation = "\n".join(lines)
 
+        _push_langfuse_score(
+            state.metadata.get('langfuse_trace_id'),
+            name="hint_quality",
+            value=score_val,
+            comment=explanation,
+        )
         return Score(
             value=score_val,
             explanation=explanation,

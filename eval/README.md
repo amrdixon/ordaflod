@@ -18,6 +18,7 @@ The framework simulates realistic student-bot conversations by using a simulated
 - **Configurable Evaluation**: Switch between architectures via simple YAML configuration
 - **Session Completion Detection**: Detects when the bot signals the session is complete
 - **Comprehensive Logging**: All conversations logged to `logs/` directory for analysis
+- **Observability**: Optional Langfuse tracing to monitor eval sessions separately from production
 
 ## Architecture
 
@@ -74,11 +75,18 @@ pip install -r requirements.txt
 Ensure you have a `.env` file in the project root (one level up) with the necessary API keys:
 
 ```bash
-# In /Users/annadixon/Documents/coding/ai_for_education/ordaflod/.env
+# In ordaflod/.env
 OPENAI_API_KEY=your_openai_key_here        # Required for realtime architecture and user bot
 ANTHROPIC_API_KEY=your_anthropic_key_here  # Required for traditional architecture and eval LLM
 MW_API_KEY=your_merriam_webster_key_here   # Required for both architectures
+
+# Optional: Langfuse observability (omit to disable tracing)
+LANGFUSE_SECRET_KEY=your_langfuse_secret_key
+LANGFUSE_PUBLIC_KEY=your_langfuse_public_key
+LANGFUSE_HOST=https://cloud.langfuse.com
 ```
+
+Langfuse is optional — evals run normally without it. When enabled, each eval conversation is traced as a parent span (`eval-vocab-quiz-session`) tagged with `source=eval` and the model name, keeping eval traces distinct from production traces in the Langfuse UI.
 
 ### 4. Configure evaluation settings
 
@@ -205,6 +213,9 @@ Depending on which architecture you're testing:
 - **OpenAI API Key** - For both Realtime API (the bot) and GPT-4o (simulated user)
 - **Anthropic API Key** - For Claude Sonnet 4.5 (evaluation LLM)
 - **Merriam-Webster Dictionary API Key** - For word definitions
+
+### For Observability (optional)
+- **Langfuse Secret Key**, **Public Key**, and **Host** - For session tracing in Langfuse
 
 ## Project Structure
 

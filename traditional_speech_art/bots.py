@@ -130,14 +130,17 @@ class SpeechVocabBot:
         if _langfuse_enabled:
             self._session_ctx = _lf.start_as_current_observation(
                 name="vocab-quiz-session",
+                input={"words": word_list},
                 metadata={"word_count": len(word_list), "source": "production"}
             )
             self._session_ctx.__enter__()
+            self._trace_id = _lf.get_current_trace_id()
         else:
             self._session_ctx = None
+            self._trace_id = None
 
         self.bot = VocabStudyBot(word_list)
-        
+
         # Initialize STT model (Whisper)
         print("Loading speech recognition model...")
         self.stt_model = whisper.load_model(WHISPER_MODEL_FP)
@@ -350,6 +353,17 @@ class SpeechVocabBot:
         if _langfuse_enabled and self._session_ctx:
             self._session_ctx.__exit__(None, None, None)
             _lf.flush()
+
+        # Run eval scorers in background thread (non-blocking)
+        if _langfuse_enabled and self._trace_id:
+            import threading
+            from session_eval import run_session_evals
+            print("Running post-session eval (may take a moment)...")
+            eval_thread = threading.Thread(
+                target=run_session_evals,
+                args=(list(self.bot.conversation_history), dict(self.bot.vocab_dict), self._trace_id, CONFIG),
+            )
+            eval_thread.start()
 
         # Cleanup any temp files
         if os.path.exists(self.recording_path):

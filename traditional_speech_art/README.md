@@ -18,6 +18,7 @@ This is a conversational AI assistant that helps students study vocabulary words
 - **AI Model**: Claude Sonnet 4.5 via LiteLLM
 - **Voice Activity Detection**: Real-time silence detection and interruption support
 - **Dictionary Integration**: Merriam-Webster API for authoritative definitions
+- **Observability**: Optional Langfuse tracing for production session monitoring
 
 ## Prerequisites
 
@@ -51,7 +52,14 @@ Create a `.env` file in the project root (one level up) with:
 ```
 ANTHROPIC_API_KEY=your_anthropic_key_here
 MW_API_KEY=your_merriam_webster_key_here
+
+# Optional: Langfuse observability (omit to disable tracing)
+LANGFUSE_SECRET_KEY=your_langfuse_secret_key
+LANGFUSE_PUBLIC_KEY=your_langfuse_public_key
+LANGFUSE_HOST=https://cloud.langfuse.com
 ```
+
+Langfuse is optional — the app runs normally without it. When enabled, each study session is traced as a parent span (`vocab-quiz-session`) with individual LLM calls nested as child generations, including token usage and the full vocabulary list studied.
 
 ### 4. Configure application settings (optional)
 
@@ -124,5 +132,6 @@ See `requirements.txt` for complete list.
 
 1. **Anthropic API Key** - For Claude Sonnet 4.5 access
 2. **Merriam-Webster Dictionary API Key** - For word definitions
+3. **Langfuse keys** *(optional)* - For session tracing and observability
 
-Both should be set in the `.env` file in the parent directory.
+All should be set in the `.env` file in the parent directory. See step 3 above for details.
