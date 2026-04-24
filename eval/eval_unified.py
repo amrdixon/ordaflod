@@ -8,6 +8,8 @@ import json
 import uuid
 import yaml
 import random
+import argparse
+import datetime
 from litellm import acompletion
 from dotenv import load_dotenv
 import os
@@ -28,8 +30,34 @@ with open("eval_unified_config.yaml") as f:
 load_dotenv(CONFIG['env_file'])
 
 from langfuse import get_client as _get_langfuse_client
+from langfuse.api import LangfuseAPI
+
 _langfuse_enabled = bool(os.getenv("LANGFUSE_SECRET_KEY"))
 _lf = _get_langfuse_client() if _langfuse_enabled else None
+_lf_api = (
+    LangfuseAPI(
+        base_url=os.getenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com"),
+        username=os.getenv("LANGFUSE_PUBLIC_KEY"),
+        password=os.getenv("LANGFUSE_SECRET_KEY"),
+    )
+    if _langfuse_enabled
+    else None
+)
+
+LAST_PROD_EVAL_TS_FILE = ".last_prod_eval_ts"
+
+
+def _read_last_eval_timestamp() -> datetime.datetime | None:
+    try:
+        with open(LAST_PROD_EVAL_TS_FILE) as f:
+            return datetime.datetime.fromisoformat(f.read().strip())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def _write_last_eval_timestamp() -> None:
+    with open(LAST_PROD_EVAL_TS_FILE, "w") as f:
+        f.write(datetime.datetime.now(datetime.timezone.utc).isoformat())
 
 
 def _push_langfuse_score(trace_id, name, value, comment=None):
@@ -125,6 +153,41 @@ def setup_user_bot() -> Tuple[str, str, Dict[str, str]]:
 
     user_model = CONFIG['user_bot_llm']
     return user_model, template, vocab_words
+
+
+def fetch_production_sessions(limit: int = 50, since: datetime.datetime | None = None) -> list:
+    """Fetch completed production sessions from Langfuse.
+
+    Reads conversation and vocab_dict from trace metadata (stored by bots.py
+    end_session()). Skips traces that pre-date this metadata schema.
+    """
+    if not _langfuse_enabled or not _lf:
+        return []
+
+    traces = _lf_api.trace.list(
+        name="vocab-quiz-session",
+        limit=limit,
+        from_timestamp=since,
+    )
+    sessions = []
+
+    for trace in traces.data:
+        metadata = trace.metadata or {}
+        vocab_dict = metadata.get("vocab_dict")
+        if not vocab_dict:
+            continue  # pre-refactor trace; no vocab data stored
+
+        conversation = metadata.get("conversation")
+        if not conversation:
+            continue  # conversation not stored; skip this trace
+
+        sessions.append({
+            "trace_id": trace.id,
+            "conversation": conversation,
+            "vocab_dict": vocab_dict,
+        })
+
+    return sessions
 
 
 def _build_user_prompt(template: str, vocab_words: Dict[str, str]) -> Tuple[str, list, list]:
@@ -240,6 +303,59 @@ def unified_review_accuracy() -> Task:
             bot_perceived_review_accuracy()
         ]
     )
+
+
+@task
+def production_session_quality(since: datetime.datetime | None = None) -> Task:
+    """Score real production sessions fetched from Langfuse.
+
+    No simulated user needed — conversations are read from trace metadata
+    (stored by bots.py end_session() alongside vocab_dict). Scores are pushed back to each
+    session's Langfuse trace by the scorers, and also recorded in inspect_ai logs.
+    """
+    sessions = fetch_production_sessions(limit=CONFIG.get("production_eval_limit", 50), since=since)
+    if not sessions:
+        raise RuntimeError(
+            "No production sessions found in Langfuse. "
+            "Make sure Langfuse is configured and sessions have been completed."
+        )
+
+    samples = []
+    for s in sessions:
+        conversation = s["conversation"]
+        beep_boop_index = next(
+            (i for i, m in enumerate(conversation)
+             if m["role"] == "assistant" and "beep boop" in m["content"].lower()),
+            None,
+        )
+        samples.append(Sample(
+            input=json.dumps(s["vocab_dict"]),
+            metadata={
+                "conversation": conversation,
+                "langfuse_trace_id": s["trace_id"],
+                "conversation_transcript": format_conversation(conversation),
+                "beep_boop_index": beep_boop_index,
+            }
+        ))
+
+    return Task(
+        name="Production Session Quality",
+        dataset=samples,
+        solver=[passthrough_solver()],
+        scorer=[
+            words_covered_rate_ground_truth(),
+            hint_quality_scorer(),
+            bot_perceived_review_accuracy(),
+        ]
+    )
+
+
+@solver
+def passthrough_solver():
+    """No-op solver for tasks where the dataset already contains the conversation."""
+    async def solve(state: TaskState, generate: Generate) -> TaskState:
+        return state
+    return solve
 
 
 # @task
@@ -1232,27 +1348,45 @@ def hint_quality_scorer():
 
 
 if __name__ == "__main__":
-    # Run evaluation
-    print(f"\n{'='*60}")
-    print(f"Running Unified Evaluation")
-    print(f"Architecture: {CONFIG['architecture']}")
-    print(f"{'='*60}\n")
+    parser = argparse.ArgumentParser(description="Run Orðaflóð evaluations")
+    parser.add_argument(
+        "--production-only",
+        action="store_true",
+        help="Score recent production traces from Langfuse only (skips simulated evals)",
+    )
+    args = parser.parse_args()
 
-    # Resolve log directory (optional subdirectory for experiment organization)
     log_subdir = CONFIG.get('log_subdir')
-    eval_kwargs = {"log_dir": f"logs/{log_subdir}"} if log_subdir else None
+    eval_kwargs = {"log_dir": f"logs/{log_subdir}"} if log_subdir else {}
 
-    # Run completion rate evaluation
-    print("\n--- Running Completion Rate Evaluation ---\n")
-    result1 = eval(unified_completion_rate(), **eval_kwargs)
+    if args.production_only:
+        print(f"\n{'='*60}")
+        print("Running Production Session Quality Evaluation")
+        print(f"{'='*60}\n")
+        if not _langfuse_enabled:
+            raise RuntimeError("LANGFUSE_SECRET_KEY is not set — cannot fetch production traces.")
+        since = _read_last_eval_timestamp()
+        if since:
+            print(f"Fetching traces since last run: {since.isoformat()}\n")
+        else:
+            print("No previous run timestamp found — fetching most recent traces.\n")
+        result_prod = eval(production_session_quality(since=since), **eval_kwargs)
+        _write_last_eval_timestamp()
+    else:
+        print(f"\n{'='*60}")
+        print(f"Running Unified Evaluation")
+        print(f"Architecture: {CONFIG['architecture']}")
+        print(f"{'='*60}\n")
 
-    # # Run recall accuracy evaluation
-    # print("\n--- Running Recall Accuracy Evaluation ---\n")
-    # result2 = eval(unified_recall_accuracy(), **eval_kwargs)
+        print("\n--- Running Completion Rate Evaluation ---\n")
+        result1 = eval(unified_completion_rate(), **eval_kwargs)
 
-    # Run review accuracy evaluation
-    print("\n--- Running Review Accuracy Evaluation ---\n")
-    result3 = eval(unified_review_accuracy(), **eval_kwargs)
+        print("\n--- Running Review Accuracy Evaluation ---\n")
+        result3 = eval(unified_review_accuracy(), **eval_kwargs)
+
+        if _langfuse_enabled:
+            print("\n--- Running Production Session Quality Evaluation ---\n")
+            result_prod = eval(production_session_quality(), **eval_kwargs)
 
     print(f"\n{'='*60}")
     print(f"Evaluation Complete")

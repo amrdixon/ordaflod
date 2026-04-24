@@ -35,6 +35,7 @@ class TraditionalBot(VocabBotInterface):
         self._output_tokens = 0
         self._turn_count = 0
         self._session_ctx = None
+        self._session_span = None
         self._trace_id: Optional[str] = None
 
     async def initialize(self, prompt: str, vocab_dict: Dict[str, str]) -> None:
@@ -63,7 +64,7 @@ class TraditionalBot(VocabBotInterface):
                 input={"vocab": vocab_dict},
                 metadata={"word_count": len(vocab_dict), "source": "eval", "model": self.model}
             )
-            self._session_ctx.__enter__()
+            self._session_span = self._session_ctx.__enter__()
             self._trace_id = _lf.get_current_trace_id()
 
     async def send_message(self, message: str) -> str:

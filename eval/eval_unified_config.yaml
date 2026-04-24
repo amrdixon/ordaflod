@@ -38,6 +38,10 @@ user_bot_percent_words_correct: 0.7
 max_turns: 40
 epochs: 4
 
+# Production session evaluation settings
+# How many recent production traces to fetch and score per eval run
+production_eval_limit: 100
+
 # Logging settings
 # Optional: set log_subdir to a string (e.g. "experiment1") to organize logs into logs/<subdir>/
 # Leave as null to use the default logs/ directory

@@ -133,10 +133,11 @@ class SpeechVocabBot:
                 input={"words": word_list},
                 metadata={"word_count": len(word_list), "source": "production"}
             )
-            self._session_ctx.__enter__()
+            self._session_span = self._session_ctx.__enter__()
             self._trace_id = _lf.get_current_trace_id()
         else:
             self._session_ctx = None
+            self._session_span = None
             self._trace_id = None
 
         self.bot = VocabStudyBot(word_list)
@@ -349,21 +350,24 @@ class SpeechVocabBot:
         print(f"\n🤖 Bot: {farewell}")
         self.speak(farewell)
 
+        # Store vocab_dict and full conversation on the trace for batch eval scoring.
+        # Generation observation inputs are not reliably captured, so the conversation
+        # is stored explicitly in trace metadata.
+        if _langfuse_enabled and self._session_span:
+            conversation = [
+                {"role": msg["role"], "content": msg["content"]}
+                for msg in self.bot.conversation_history
+                if msg["role"] != "system"
+            ]
+            self._session_span.update(metadata={
+                "vocab_dict": self.bot.vocab_dict,
+                "conversation": conversation,
+            })
+
         # Close the session span and flush all traces
         if _langfuse_enabled and self._session_ctx:
             self._session_ctx.__exit__(None, None, None)
             _lf.flush()
-
-        # Run eval scorers in background thread (non-blocking)
-        if _langfuse_enabled and self._trace_id:
-            import threading
-            from session_eval import run_session_evals
-            print("Running post-session eval (may take a moment)...")
-            eval_thread = threading.Thread(
-                target=run_session_evals,
-                args=(list(self.bot.conversation_history), dict(self.bot.vocab_dict), self._trace_id, CONFIG),
-            )
-            eval_thread.start()
 
         # Cleanup any temp files
         if os.path.exists(self.recording_path):
