@@ -41,6 +41,9 @@ epochs: 4
 # Production session evaluation settings
 # How many recent production traces to fetch and score per eval run
 production_eval_limit: 100
+# How far back (in days) to look for production traces when running --production-only
+# Supports floats, e.g. 0.5 = last 12 hours
+production_lookback_days: 1
 
 # Logging settings
 # Optional: set log_subdir to a string (e.g. "experiment1") to organize logs into logs/<subdir>/

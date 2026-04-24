@@ -44,21 +44,6 @@ _lf_api = (
     else None
 )
 
-LAST_PROD_EVAL_TS_FILE = ".last_prod_eval_ts"
-
-
-def _read_last_eval_timestamp() -> datetime.datetime | None:
-    try:
-        with open(LAST_PROD_EVAL_TS_FILE) as f:
-            return datetime.datetime.fromisoformat(f.read().strip())
-    except (FileNotFoundError, ValueError):
-        return None
-
-
-def _write_last_eval_timestamp() -> None:
-    with open(LAST_PROD_EVAL_TS_FILE, "w") as f:
-        f.write(datetime.datetime.now(datetime.timezone.utc).isoformat())
-
 
 def _push_langfuse_score(trace_id, name, value, comment=None):
     if not _langfuse_enabled or not _lf or not trace_id:
@@ -1354,6 +1339,13 @@ if __name__ == "__main__":
         action="store_true",
         help="Score recent production traces from Langfuse only (skips simulated evals)",
     )
+    parser.add_argument(
+        "--lookback-days",
+        type=float,
+        default=None,
+        help="How many days back to fetch production traces (overrides config). "
+             "Only used with --production-only. Supports floats, e.g. 0.5 = 12 hours.",
+    )
     args = parser.parse_args()
 
     log_subdir = CONFIG.get('log_subdir')
@@ -1365,13 +1357,10 @@ if __name__ == "__main__":
         print(f"{'='*60}\n")
         if not _langfuse_enabled:
             raise RuntimeError("LANGFUSE_SECRET_KEY is not set — cannot fetch production traces.")
-        since = _read_last_eval_timestamp()
-        if since:
-            print(f"Fetching traces since last run: {since.isoformat()}\n")
-        else:
-            print("No previous run timestamp found — fetching most recent traces.\n")
+        lookback_days = args.lookback_days if args.lookback_days is not None else CONFIG.get("production_lookback_days", 1)
+        since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=lookback_days)
+        print(f"Fetching traces from the last {lookback_days} day(s) (since {since.isoformat()})\n")
         result_prod = eval(production_session_quality(since=since), **eval_kwargs)
-        _write_last_eval_timestamp()
     else:
         print(f"\n{'='*60}")
         print(f"Running Unified Evaluation")
